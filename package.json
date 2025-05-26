@@ -1,0 +1,41 @@
+{
+  "name": "project-tracker-bot",
+  "version": "1.0.0",
+  "description": "Slack bot for project management with PostgreSQL and OpenAI integration",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "db:generate": "prisma generate",
+    "db:push": "prisma db push",
+    "db:migrate": "prisma migrate dev",
+    "db:studio": "prisma studio"
+  },
+  "dependencies": {
+    "@slack/bolt": "^3.17.1",
+    "@prisma/client": "^5.7.1",
+    "express": "^4.18.2",
+    "openai": "^4.20.1",
+    "dotenv": "^16.3.1",
+    "node-cron": "^3.0.3",
+    "winston": "^3.11.0",
+    "helmet": "^7.1.0",
+    "cors": "^2.8.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "prisma": "^5.7.1"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "slack",
+    "bot",
+    "project-management",
+    "postgresql",
+    "openai"
+  ],
+  "author": "",
+  "license": "MIT"
+} 

@@ -1,0 +1,70 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  slackUserId  String   @unique @map("slack_user_id")
+  name         String
+  email        String?
+  role         String   @default("member")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  assignedProjects Project[]
+  projectUpdates   ProjectUpdate[]
+
+  @@map("users")
+}
+
+model Project {
+  id          String        @id @default(cuid())
+  name        String
+  clientName  String        @map("client_name")
+  status      ProjectStatus @default(PLANNING)
+  assignedTo  String?       @map("assigned_to")
+  description String?
+  deadline    DateTime?
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  // Relations
+  assignee User?           @relation(fields: [assignedTo], references: [id])
+  updates  ProjectUpdate[]
+
+  @@map("projects")
+}
+
+model ProjectUpdate {
+  id                 String   @id @default(cuid())
+  projectId          String   @map("project_id")
+  userId             String   @map("user_id")
+  content            String
+  aiAnalysis         String?  @map("ai_analysis")
+  risksIdentified    String[] @map("risks_identified")
+  opportunitiesNoted String[] @map("opportunities_noted")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  // Relations
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id])
+
+  @@map("project_updates")
+}
+
+enum ProjectStatus {
+  PLANNING
+  IN_PROGRESS
+  ON_HOLD
+  COMPLETED
+  CANCELLED
+} 
