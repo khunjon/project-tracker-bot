@@ -3,9 +3,11 @@ const userService = require('../../services/userService');
 const logger = require('../../config/logger');
 
 const projectNewCommand = async ({ command, ack, respond, client, body, slackService }) => {
+  const startTime = Date.now();
   await ack();
 
   try {
+    logger.info('Project new command started', { userId: command.user_id, startTime });
     // Parse optional project name from command text
     const projectNameFromCommand = command.text ? command.text.trim() : '';
     
@@ -252,10 +254,18 @@ const projectNewCommand = async ({ command, ack, respond, client, body, slackSer
       view: modal
     });
 
-    logger.info('Project creation modal opened', { userId: body.user_id });
+    const responseTime = Date.now() - startTime;
+    logger.info('Project creation modal opened', { 
+      userId: body.user_id, 
+      responseTime: `${responseTime}ms` 
+    });
 
   } catch (error) {
-    logger.error('Error opening project creation modal:', error);
+    const responseTime = Date.now() - startTime;
+    logger.error('Error opening project creation modal:', { 
+      error: error.message, 
+      responseTime: `${responseTime}ms` 
+    });
     
     await respond({
       text: "❌ Sorry, there was an error opening the project creation form. Please try again.",
