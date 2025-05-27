@@ -39,6 +39,14 @@ logger.info(`   - Database URL: ${process.env.DATABASE_URL ? '✅ Set' : '❌ Mi
 logger.info(`   - OpenAI API Key: ${process.env.OPENAI_API_KEY ? '✅ Set' : '⚠️  Optional'}`);
 logger.info(`   - General Channel ID: ${process.env.GENERAL_CHANNEL_ID ? '✅ Set' : '⚠️  Optional'}`);
 
+// Log Railway-specific environment info
+if (process.env.RAILWAY_ENVIRONMENT) {
+  logger.info('🚂 Railway Environment Detected:');
+  logger.info(`   - Environment: ${process.env.RAILWAY_ENVIRONMENT}`);
+  logger.info(`   - Service: ${process.env.RAILWAY_SERVICE_NAME || 'unknown'}`);
+  logger.info(`   - Deployment: ${process.env.RAILWAY_DEPLOYMENT_ID || 'unknown'}`);
+}
+
 // Handle startup errors gracefully
 process.on('uncaughtException', (error) => {
   logger.error('💥 Uncaught Exception during startup:', error);

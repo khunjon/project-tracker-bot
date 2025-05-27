@@ -229,12 +229,24 @@ class ProjectTrackerBot {
       // Clear any intervals
       if (this.keepAliveInterval) {
         clearInterval(this.keepAliveInterval);
+        logger.info('✅ Cleared keep-alive interval');
       }
 
-      // Disconnect from database
-      await disconnect();
+      // Disconnect from database with timeout
+      logger.info('🔌 Starting database cleanup...');
+      const cleanupPromise = disconnect();
+      const timeoutPromise = new Promise((resolve) => {
+        setTimeout(() => {
+          logger.warn('⏰ Database cleanup timeout, continuing shutdown');
+          resolve();
+        }, 8000); // 8 second timeout for cleanup
+      });
+      
+      await Promise.race([cleanupPromise, timeoutPromise]);
+      logger.info('✅ Database cleanup completed');
     } catch (error) {
-      logger.error('Error during cleanup:', error);
+      logger.error('❌ Error during cleanup:', error);
+      // Continue with shutdown even if cleanup fails
     }
   }
 
