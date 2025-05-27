@@ -292,13 +292,23 @@ class WeeklyDigestService {
 
   // Stop the scheduled digest
   stopScheduledDigest() {
-    if (this.cronTask) {
-      this.cronTask.stop();
+    try {
+      if (this.cronTask) {
+        // Only call stop if it exists
+        if (typeof this.cronTask.stop === 'function') {
+          this.cronTask.stop();
+        }
+        this.cronTask = null;
+        logger.info('✅ Weekly digest cron task stopped');
+      }
+      this.isScheduled = false;
+      logger.info('✅ Weekly digest scheduling stopped');
+    } catch (error) {
+      logger.error('Error stopping cron task:', error);
+      // Force cleanup even if there's an error
       this.cronTask = null;
-      logger.info('✅ Weekly digest cron task stopped');
+      this.isScheduled = false;
     }
-    this.isScheduled = false;
-    logger.info('✅ Weekly digest scheduling stopped');
   }
 
   // Get digest status
