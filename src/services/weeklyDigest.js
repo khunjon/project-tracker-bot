@@ -7,6 +7,7 @@ class WeeklyDigestService {
   constructor(slackClient) {
     this.client = slackClient;
     this.isScheduled = false;
+    this.cronTask = null;
   }
 
   // Schedule weekly digest to run every Monday at 9 AM
@@ -17,7 +18,7 @@ class WeeklyDigestService {
     }
 
     // Run every Monday at 9:00 AM (0 9 * * 1)
-    cron.schedule('0 9 * * 1', async () => {
+    this.cronTask = cron.schedule('0 9 * * 1', async () => {
       await this.generateAndSendDigest();
     }, {
       scheduled: true,
@@ -291,10 +292,14 @@ class WeeklyDigestService {
 
   // Stop the scheduled digest
   stopScheduledDigest() {
-    // Note: node-cron doesn't provide a direct way to stop specific tasks
-    // This would require keeping track of the task reference
+    if (this.cronTask) {
+      this.cronTask.stop();
+      this.cronTask.destroy();
+      this.cronTask = null;
+      logger.info('✅ Weekly digest cron task stopped and destroyed');
+    }
     this.isScheduled = false;
-    logger.info('Weekly digest scheduling stopped');
+    logger.info('✅ Weekly digest scheduling stopped');
   }
 
   // Get digest status

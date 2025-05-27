@@ -14,6 +14,12 @@ logger.info(`🐳 Platform: ${process.platform}`);
 logger.info(`📦 Node.js: ${process.version}`);
 logger.info(`💾 Memory: ${Math.round(process.memoryUsage().heapUsed / 1024 / 1024)}MB`);
 
+// Set NODE_ENV to production if running on Railway
+if (process.env.RAILWAY_ENVIRONMENT && !process.env.NODE_ENV) {
+  process.env.NODE_ENV = 'production';
+  logger.info('🚂 Set NODE_ENV to production for Railway deployment');
+}
+
 // Validate critical environment variables
 const requiredEnvVars = [
   'SLACK_BOT_TOKEN',

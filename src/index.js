@@ -49,9 +49,14 @@ class ProjectTrackerBot {
     // Health check endpoint
     this.app.get('/health', async (req, res) => {
       try {
-        // Test database connection
+        // Test database connection with timeout
         const { prisma } = require('./config/database');
-        await prisma.$queryRaw`SELECT 1`;
+        const queryPromise = prisma.$queryRaw`SELECT 1 as health_check`;
+        const timeoutPromise = new Promise((_, reject) => {
+          setTimeout(() => reject(new Error('Health check timeout')), 5000);
+        });
+        
+        await Promise.race([queryPromise, timeoutPromise]);
         
         const status = {
           status: 'healthy',
@@ -254,7 +259,7 @@ class ProjectTrackerBot {
     logger.info('🛑 Shutting down Project Tracker Bot...');
 
     try {
-      // Stop Slack app
+      // Stop Slack app first (this stops cron jobs)
       if (this.slackApp) {
         logger.info('🤖 Stopping Slack app...');
         await this.slackApp.stop();
@@ -271,7 +276,11 @@ class ProjectTrackerBot {
         });
       }
 
-      // Clean up resources
+      // Wait a moment for any pending operations to complete
+      logger.info('⏳ Waiting for pending operations to complete...');
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
+      // Clean up resources (including database connections)
       await this.cleanup();
 
       logger.info('✅ Project Tracker Bot shut down successfully');
