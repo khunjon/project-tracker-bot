@@ -78,11 +78,11 @@ process.on('SIGINT', () => {
 // Start the application
 async function start() {
   try {
-    // Import and start the main application
-    const app = require('../src/index');
+    // Import the main application
+    require('../src/index');
     
-    // The app will handle its own startup process
-    logger.info('✅ Startup script completed successfully');
+    // Keep the startup script alive - the main app will handle everything
+    // This prevents the startup script from exiting prematurely
     
   } catch (error) {
     logger.error('💥 Failed to start application:', error);

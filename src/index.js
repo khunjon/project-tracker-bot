@@ -8,6 +8,11 @@ const SlackApp = require('./slack/app');
 const { testConnection, disconnect } = require('./config/database');
 const { requestLogger, errorLogger, createHealthMonitor } = require('./middleware/monitoring');
 
+// Set NODE_ENV to production if running on Railway
+if (process.env.RAILWAY_ENVIRONMENT && !process.env.NODE_ENV) {
+  process.env.NODE_ENV = 'production';
+}
+
 // Validate required environment variables
 const requiredEnvVars = [
   'SLACK_BOT_TOKEN',

@@ -5,7 +5,7 @@ builder = "nixpacks"
 cmds = ["npm ci", "npm run db:generate"]
 
 [deploy]
-startCommand = "npm start"
+startCommand = "node src/index.js"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
 
