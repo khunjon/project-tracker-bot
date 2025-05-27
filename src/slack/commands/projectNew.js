@@ -2,14 +2,29 @@ const projectService = require('../../services/projectService');
 const userService = require('../../services/userService');
 const logger = require('../../config/logger');
 
-const projectNewCommand = async ({ command, ack, client, body }) => {
+const projectNewCommand = async ({ command, ack, client, body, slackService }) => {
   await ack();
 
   try {
-    // Get all users for assignee dropdown
-    const users = await userService.getAllUsers();
+    // Parse optional project name from command text
+    const projectNameFromCommand = command.text ? command.text.trim() : '';
     
-    const userOptions = users.map(user => ({
+    // Get workspace users for assignee dropdown
+    const workspaceUsers = await slackService.getWorkspaceUsers();
+    
+    // Get current user info to set as default assignee
+    const currentUser = await slackService.getUserInfo(command.user_id);
+    
+    // Get client channels for client dropdown
+    const clientChannels = await slackService.getClientChannels();
+    
+    logger.info('Client channels retrieved for project creation', { 
+      count: clientChannels.length, 
+      channels: clientChannels.map(c => c.displayName) 
+    });
+    
+    // Create user options from workspace users
+    const userOptions = workspaceUsers.map(user => ({
       text: {
         type: "plain_text",
         text: user.name
@@ -25,6 +40,39 @@ const projectNewCommand = async ({ command, ack, client, body }) => {
       },
       value: "unassigned"
     });
+
+    // Create client options from client channels
+    const clientOptions = clientChannels.map(client => ({
+      text: {
+        type: "plain_text",
+        text: client.displayName
+      },
+      value: client.name
+    }));
+
+    // Add "Other" option for clients not in channels
+    clientOptions.push({
+      text: {
+        type: "plain_text",
+        text: "Other (enter manually)"
+      },
+      value: "other"
+    });
+
+    // Ensure we have at least one option
+    if (clientOptions.length === 1) {
+      // Only "Other" option exists, add a default message
+      clientOptions.unshift({
+        text: {
+          type: "plain_text",
+          text: "No client channels found - use Other"
+        },
+        value: "no_clients"
+      });
+    }
+
+    // Find default assignee (current user)
+    const defaultAssignee = currentUser ? userOptions.find(option => option.value === currentUser.id) : null;
 
     const modal = {
       type: "modal",
@@ -52,7 +100,8 @@ const projectNewCommand = async ({ command, ack, client, body }) => {
               type: "plain_text",
               text: "Enter project name"
             },
-            max_length: 100
+            max_length: 100,
+            ...(projectNameFromCommand && { initial_value: projectNameFromCommand })
           },
           label: {
             type: "plain_text",
@@ -61,10 +110,27 @@ const projectNewCommand = async ({ command, ack, client, body }) => {
         },
         {
           type: "input",
-          block_id: "client_name",
+          block_id: "client_select",
+          element: {
+            type: "static_select",
+            action_id: "client_dropdown",
+            placeholder: {
+              type: "plain_text",
+              text: "Select a client"
+            },
+            options: clientOptions
+          },
+          label: {
+            type: "plain_text",
+            text: "Client"
+          }
+        },
+        {
+          type: "input",
+          block_id: "client_name_other",
           element: {
             type: "plain_text_input",
-            action_id: "client_input",
+            action_id: "client_other_input",
             placeholder: {
               type: "plain_text",
               text: "Enter client name"
@@ -73,8 +139,9 @@ const projectNewCommand = async ({ command, ack, client, body }) => {
           },
           label: {
             type: "plain_text",
-            text: "Client Name"
-          }
+            text: "Client Name (if Other selected above)"
+          },
+          optional: true
         },
         {
           type: "input",
@@ -151,7 +218,8 @@ const projectNewCommand = async ({ command, ack, client, body }) => {
               type: "plain_text",
               text: "Select assignee"
             },
-            options: userOptions
+            options: userOptions,
+            ...(defaultAssignee && { initial_option: defaultAssignee })
           },
           label: {
             type: "plain_text",
@@ -197,16 +265,39 @@ const projectNewCommand = async ({ command, ack, client, body }) => {
   }
 };
 
-const handleProjectNewSubmission = async ({ ack, body, view, client }) => {
-  await ack();
-
+const handleProjectNewSubmission = async ({ ack, body, view, client, slackService }) => {
   try {
     const values = view.state.values;
     
     // Extract form data
+    const selectedClient = values.client_select.client_dropdown.selected_option.value;
+    const clientName = (selectedClient === 'other' || selectedClient === 'no_clients')
+      ? values.client_name_other?.client_other_input?.value 
+      : selectedClient;
+
+    // Validate client name
+    if ((selectedClient === 'other' || selectedClient === 'no_clients') && (!clientName || clientName.trim() === '')) {
+      // Return validation error
+      await ack({
+        response_action: 'errors',
+        errors: {
+          client_name_other: 'Please enter a client name'
+        }
+      });
+      return;
+    }
+
+    // Acknowledge the submission after validation
+    await ack();
+
+    // Format client name for display
+    const displayClientName = (selectedClient === 'other' || selectedClient === 'no_clients')
+      ? clientName.trim()
+      : clientName.split('-').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ');
+
     const projectData = {
       name: values.project_name.name_input.value,
-      clientName: values.client_name.client_input.value,
+      clientName: displayClientName,
       description: values.project_description?.description_input?.value || null,
       status: values.project_status.status_select.selected_option.value,
       assignedTo: values.assigned_to?.assignee_select?.selected_option?.value === 'unassigned' 
@@ -215,13 +306,33 @@ const handleProjectNewSubmission = async ({ ack, body, view, client }) => {
       deadline: values.project_deadline?.deadline_picker?.selected_date || null
     };
 
-    // Ensure user exists in database
-    const user = await userService.findOrCreateUser(body.user.id, {
+    // Ensure creator exists in database
+    const creator = await userService.findOrCreateUser(body.user.id, {
       name: body.user.name || body.user.username
     });
 
+    // If someone is assigned, ensure they exist in database too
+    let assigneeDbId = null;
+    if (projectData.assignedTo && projectData.assignedTo !== 'unassigned') {
+      // Get assignee info from Slack
+      const assigneeInfo = await slackService.getUserInfo(projectData.assignedTo);
+      if (assigneeInfo) {
+        const assigneeUser = await userService.findOrCreateUser(projectData.assignedTo, {
+          name: assigneeInfo.name,
+          email: assigneeInfo.email
+        });
+        assigneeDbId = assigneeUser.id;
+      }
+    }
+
+    // Update project data with database user ID
+    const finalProjectData = {
+      ...projectData,
+      assignedTo: assigneeDbId
+    };
+
     // Create the project
-    const project = await projectService.createProject(projectData, body.user.id);
+    const project = await projectService.createProject(finalProjectData, body.user.id);
 
     // Format deadline for display
     const deadlineText = project.deadline 

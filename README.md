@@ -5,7 +5,7 @@ A comprehensive Slack bot for project management with PostgreSQL database integr
 ## Features
 
 ### 🤖 Slack Bot Commands
-- **`/project-new`** - Create new projects with modal forms
+- **`/project-new [project name]`** - Create new projects with modal forms (optional project name pre-population)
 - **`/project-update`** - Add updates to existing projects with AI analysis
 - **`/project-list`** - View all projects with interactive details
 
@@ -42,113 +42,98 @@ A comprehensive Slack bot for project management with PostgreSQL database integr
 - Slack workspace with bot permissions
 - OpenAI API key
 
-## Installation
+## Quick Start
 
-1. **Clone the repository**
+1. **Clone and install**
    ```bash
-   git clone <repository-url>
+   git clone https://github.com/khunjon/project-tracker-bot.git
    cd project-tracker-bot
-   ```
-
-2. **Install dependencies**
-   ```bash
    npm install
    ```
 
-3. **Set up environment variables**
+2. **Set up environment**
    ```bash
    cp env.example .env
-   ```
-   
-   Fill in your environment variables:
-   ```env
-   # Slack Bot Configuration
-   SLACK_BOT_TOKEN=xoxb-your-bot-token-here
-   SLACK_SIGNING_SECRET=your-signing-secret-here
-   SLACK_APP_TOKEN=xapp-your-app-token-here
-
-   # Database Configuration
-   DATABASE_URL=postgresql://username:password@localhost:5432/project_tracker
-
-   # OpenAI Configuration
-   OPENAI_API_KEY=your-openai-api-key-here
-
-   # Server Configuration
-   PORT=3000
-   NODE_ENV=development
-
-   # Slack Channel Configuration
-   GENERAL_CHANNEL_ID=C1234567890
+   # Edit .env with your tokens (see Configuration section below)
    ```
 
-4. **Set up the database**
+3. **Initialize database**
    ```bash
-   # Generate Prisma client
    npm run db:generate
-   
-   # Push schema to database
    npm run db:push
    ```
 
-5. **Create logs directory**
+4. **Start development server**
    ```bash
-   mkdir logs
+   npm run dev
    ```
 
-## Slack App Setup
+## Features Overview
 
-1. **Create a Slack App**
-   - Go to [api.slack.com/apps](https://api.slack.com/apps)
-   - Click "Create New App" → "From scratch"
-   - Name your app and select your workspace
+### **🤖 Slack Commands**
+- **`/project-new [project name]`** - Interactive modal for creating projects with:
+  - Optional project name pre-population from command argument
+  - Client selection from workspace channels (format: `#client-{name}`) or manual entry
+  - User assignment from workspace members with default to command user
+  - Status, description, and deadline settings
+- **`/project-update`** - Add progress updates with AI-powered analysis and risk identification  
+- **`/project-list`** - Portfolio overview with project statistics and interactive details
 
-2. **Configure Bot Token Scopes**
-   Go to "OAuth & Permissions" and add these scopes:
-   ```
-   app_mentions:read
-   channels:read
-   chat:write
-   commands
-   im:history
-   im:read
-   im:write
-   users:read
-   ```
+### **🧠 AI Integration**
+- Automatic analysis of project updates using OpenAI
+- Risk identification and opportunity detection
+- Weekly digest generation with actionable insights
 
-3. **Enable Socket Mode**
-   - Go to "Socket Mode" and enable it
-   - Generate an App-Level Token with `connections:write` scope
+### **📊 Automated Reporting**
+- Weekly digest posted to #general every Monday at 9 AM
+- Project statistics and recent activity summaries
+- Deadline tracking with urgency indicators
 
-4. **Create Slash Commands**
-   Go to "Slash Commands" and create:
-   - `/project-new` - Create a new project
-   - `/project-update` - Update an existing project  
-   - `/project-list` - List all projects
+## Development & Testing
 
-5. **Enable Events**
-   Go to "Event Subscriptions" and subscribe to:
-   - `app_mention`
-   - `message.im`
-
-6. **Install App to Workspace**
-   - Go to "Install App" and install to your workspace
-   - Copy the Bot User OAuth Token
-
-## Development
-
+### **Start Development Server**
 ```bash
-# Start in development mode with auto-reload
 npm run dev
-
-# Start in production mode
-npm start
-
-# Database operations
-npm run db:generate  # Generate Prisma client
-npm run db:push      # Push schema changes
-npm run db:migrate   # Run migrations
-npm run db:studio    # Open Prisma Studio
 ```
+The bot will start on `http://localhost:3000` with auto-reload enabled.
+
+### **Test the Bot in Slack**
+
+1. **Create a Project:**
+   ```
+   /project-new
+   ```
+   Opens a modal form to create a new project with client details, deadlines, and assignments.
+
+2. **List Projects:**
+   ```
+   /project-list
+   ```
+   Shows all projects grouped by status with interactive "View Details" buttons.
+
+3. **Update a Project:**
+   ```
+   /project-update
+   ```
+   Add progress updates with optional status changes. AI analysis will be generated automatically.
+
+4. **Mention the Bot:**
+   ```
+   @YourBotName help
+   ```
+   Get help information and available commands.
+
+### **Database Management**
+```bash
+npm run db:generate  # Generate Prisma client after schema changes
+npm run db:push      # Push schema changes to database
+npm run db:studio    # Open Prisma Studio at http://localhost:5555
+```
+
+### **Health Checks**
+- **Bot Status:** `http://localhost:3000/health`
+- **API Status:** `http://localhost:3000/status`
+- **Manual Digest:** `POST http://localhost:3000/trigger-digest`
 
 ## API Endpoints
 
@@ -174,80 +159,64 @@ id, project_id, user_id, content, ai_analysis, risks_identified, opportunities_n
 id, slack_user_id, name, email, role, created_at, updated_at
 ```
 
-## Deployment
+## Production Deployment
 
-### Railway Deployment
+### **Railway (Recommended)**
 
-1. **Connect to Railway**
-   ```bash
-   npm install -g @railway/cli
-   railway login
-   railway init
+1. **Connect your GitHub repo to Railway**
+   - Go to [railway.app](https://railway.app)
+   - Create new project from GitHub repo
+   - Add PostgreSQL service
+
+2. **Set environment variables in Railway dashboard:**
+   ```
+   SLACK_BOT_TOKEN=xoxb-...
+   SLACK_SIGNING_SECRET=...
+   SLACK_APP_TOKEN=xapp-...
+   OPENAI_API_KEY=sk-...
+   GENERAL_CHANNEL_ID=C...
+   NODE_ENV=production
    ```
 
-2. **Add PostgreSQL**
-   ```bash
-   railway add postgresql
-   ```
+3. **Deploy automatically on git push**
 
-3. **Set Environment Variables**
-   ```bash
-   railway variables set SLACK_BOT_TOKEN=xoxb-...
-   railway variables set SLACK_SIGNING_SECRET=...
-   railway variables set SLACK_APP_TOKEN=xapp-...
-   railway variables set OPENAI_API_KEY=...
-   railway variables set GENERAL_CHANNEL_ID=...
-   ```
-
-4. **Deploy**
-   ```bash
-   railway up
-   ```
-
-### Docker Deployment
-
-```dockerfile
-FROM node:18-alpine
-
-WORKDIR /app
-
-COPY package*.json ./
-RUN npm ci --only=production
-
-COPY . .
-
-RUN npx prisma generate
-
-EXPOSE 3000
-
-CMD ["npm", "start"]
+### **Docker**
+```bash
+docker-compose up --build
 ```
 
-## Usage
+## Configuration
 
-### Creating a Project
-1. Use `/project-new` in any Slack channel
-2. Fill out the modal form with project details
-3. Assign team members and set deadlines
-4. Submit to create the project
+### **Required Environment Variables**
 
-### Adding Updates
-1. Use `/project-update` in any channel
-2. Select the project from the dropdown
-3. Add your update content
-4. Optionally change project status
-5. Submit to add update with AI analysis
+Copy `env.example` to `.env` and fill in these values:
 
-### Viewing Projects
-1. Use `/project-list` to see all projects
-2. Click "View Details" for specific project information
-3. Use "View Statistics" for portfolio overview
+```env
+# Slack Bot Configuration (from api.slack.com)
+SLACK_BOT_TOKEN=xoxb-your-bot-token-here          # Bot User OAuth Token
+SLACK_SIGNING_SECRET=your-signing-secret-here      # App Credentials > Signing Secret  
+SLACK_APP_TOKEN=xapp-your-app-token-here          # App-Level Token (Socket Mode)
 
-### Weekly Digest
-- Automatically posted every Monday at 9 AM
-- Includes AI-generated summary
-- Shows active projects and recent updates
-- Highlights upcoming deadlines
+# Database Configuration (Railway PostgreSQL)
+DATABASE_URL=postgresql://user:pass@host:port/db
+
+# OpenAI Configuration (Optional - for AI analysis)
+OPENAI_API_KEY=sk-your-openai-api-key-here
+
+# Server Configuration
+PORT=3000
+NODE_ENV=development
+
+# Slack Channel Configuration (for weekly digest)
+GENERAL_CHANNEL_ID=C1234567890                    # Right-click channel > Copy link
+```
+
+### **Slack App Setup Checklist**
+
+1. **Enable Socket Mode** - Required for local development
+2. **Add Bot Scopes:** `chat:write`, `commands`, `app_mentions:read`, `channels:read`, `im:read`, `im:write`, `users:read`
+3. **Create Slash Commands:** `/project-new`, `/project-update`, `/project-list`
+4. **Install App to Workspace** - Get your Bot User OAuth Token
 
 ## Monitoring
 

@@ -8,6 +8,7 @@ const projectListCommand = require('./commands/projectList');
 
 // Import services
 const WeeklyDigestService = require('../services/weeklyDigest');
+const SlackService = require('../services/slackService');
 
 class SlackApp {
   constructor() {
@@ -20,14 +21,15 @@ class SlackApp {
     });
 
     this.weeklyDigest = new WeeklyDigestService(this.app.client);
+    this.slackService = new SlackService(this.app.client);
     this.setupCommands();
     this.setupEventHandlers();
     this.setupInteractions();
   }
 
   setupCommands() {
-    // Register slash commands
-    this.app.command('/project-new', projectNewCommand.command);
+    // Register slash commands with slackService context
+    this.app.command('/project-new', (args) => projectNewCommand.command({ ...args, slackService: this.slackService }));
     this.app.command('/project-update', projectUpdateCommand.command);
     this.app.command('/project-list', projectListCommand.command);
 
@@ -92,7 +94,7 @@ You can use these commands in any channel or here in our DM!`;
 
   setupInteractions() {
     // Handle modal submissions
-    this.app.view('project_new_modal', projectNewCommand.handleSubmission);
+    this.app.view('project_new_modal', (args) => projectNewCommand.handleSubmission({ ...args, slackService: this.slackService }));
     this.app.view('project_update_modal', projectUpdateCommand.handleSubmission);
 
     // Handle button interactions
