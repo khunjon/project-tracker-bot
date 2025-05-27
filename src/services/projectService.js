@@ -273,6 +273,32 @@ class ProjectService {
       throw error;
     }
   }
+
+  async getUniqueClients() {
+    try {
+      const result = await prisma.project.findMany({
+        select: {
+          clientName: true
+        },
+        distinct: ['clientName'],
+        orderBy: {
+          clientName: 'asc'
+        }
+      });
+
+      const clients = result.map(project => project.clientName);
+      
+      logger.info('Unique clients fetched from database', { 
+        count: clients.length,
+        clients: clients
+      });
+      
+      return clients;
+    } catch (error) {
+      logger.error('Error getting unique clients:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new ProjectService(); 

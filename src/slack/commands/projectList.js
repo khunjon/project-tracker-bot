@@ -1,7 +1,7 @@
 const projectService = require('../../services/projectService');
 const logger = require('../../config/logger');
 
-const projectListCommand = async ({ command, ack, client, body }) => {
+const projectListCommand = async ({ command, ack, respond, client, body }) => {
   await ack();
 
   try {
@@ -9,10 +9,9 @@ const projectListCommand = async ({ command, ack, client, body }) => {
     const projects = await projectService.getAllProjects();
     
     if (projects.length === 0) {
-      await client.chat.postEphemeral({
-        channel: command.channel_id,
-        user: command.user_id,
-        text: "📋 No projects found. Create your first project using `/project-new`."
+      await respond({
+        text: "📋 No projects found. Create your first project using `/project-new`.",
+        response_type: "ephemeral"
       });
       return;
     }
@@ -163,10 +162,9 @@ const projectListCommand = async ({ command, ack, client, body }) => {
     );
 
     // Send the message
-    await client.chat.postEphemeral({
-      channel: command.channel_id,
-      user: command.user_id,
-      blocks: blocks
+    await respond({
+      blocks: blocks,
+      response_type: "ephemeral"
     });
 
     logger.info('Project list displayed', { 
@@ -177,10 +175,9 @@ const projectListCommand = async ({ command, ack, client, body }) => {
   } catch (error) {
     logger.error('Error displaying project list:', error);
     
-    await client.chat.postEphemeral({
-      channel: command.channel_id,
-      user: command.user_id,
-      text: "❌ Sorry, there was an error retrieving the project list. Please try again."
+    await respond({
+      text: "❌ Sorry, there was an error retrieving the project list. Please try again.",
+      response_type: "ephemeral"
     });
   }
 };

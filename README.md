@@ -76,7 +76,7 @@ A comprehensive Slack bot for project management with PostgreSQL database integr
   - Client selection from workspace channels (format: `#client-{name}`) or manual entry
   - User assignment from workspace members with default to command user
   - Status, description, and deadline settings
-- **`/project-update`** - Add progress updates with AI-powered analysis and risk identification  
+- **`/project-update`** - Add progress updates with database-driven client filtering and AI-powered analysis and risk identification  
 - **`/project-list`** - Portfolio overview with project statistics and interactive details
 
 ### **🧠 AI Integration**
@@ -115,7 +115,12 @@ The bot will start on `http://localhost:3000` with auto-reload enabled.
    ```
    /project-update
    ```
-   Add progress updates with optional status changes. AI analysis will be generated automatically.
+   Add progress updates with client filtering for easier project selection. Features:
+   - Client dropdown showing only clients that have existing projects in the database
+   - Dynamic project list showing project names with current status
+   - Assignee management with workspace user selection
+   - Accurate filtering with no empty results for non-existent clients
+   - Required status selection and AI analysis generation
 
 4. **Mention the Bot:**
    ```

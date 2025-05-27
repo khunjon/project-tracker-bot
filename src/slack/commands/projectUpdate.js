@@ -2,26 +2,94 @@ const projectService = require('../../services/projectService');
 const userService = require('../../services/userService');
 const logger = require('../../config/logger');
 
-const projectUpdateCommand = async ({ command, ack, client, body }) => {
+const projectUpdateCommand = async ({ command, ack, respond, client, body, slackService }) => {
   await ack();
 
   try {
-    // Get all active projects for the dropdown
+    // Get all active projects for counting
     const projects = await projectService.getAllProjects();
     
     if (projects.length === 0) {
-      await client.chat.postEphemeral({
-        channel: command.channel_id,
-        user: command.user_id,
-        text: "📝 No projects found. Create a project first using `/project-new`."
+      await respond({
+        text: "📝 No projects found. Create a project first using `/project-new`.",
+        response_type: "ephemeral"
       });
       return;
     }
 
+    // Get unique clients from database (clients that actually have projects)
+    const uniqueClients = await projectService.getUniqueClients();
+    
+    // Get workspace users for assignee dropdown
+    const workspaceUsers = await slackService.getWorkspaceUsers();
+    
+    logger.info('Data retrieved for project update', { 
+      clientCount: uniqueClients.length, 
+      clients: uniqueClients,
+      userCount: workspaceUsers.length
+    });
+
+    // Create client options from database clients
+    const clientOptions = uniqueClients.map(clientName => ({
+      text: {
+        type: "plain_text",
+        text: clientName
+      },
+      value: clientName
+    }));
+
+    // Add "All Clients" option to show all projects
+    clientOptions.unshift({
+      text: {
+        type: "plain_text",
+        text: "All Clients"
+      },
+      value: "all_clients"
+    });
+
+    // If no clients found, add a message
+    if (clientOptions.length === 1) {
+      clientOptions.push({
+        text: {
+          type: "plain_text",
+          text: "No clients found"
+        },
+        value: "no_clients"
+      });
+    }
+
+    // Create user options from workspace users
+    const userOptions = workspaceUsers.map(user => ({
+      text: {
+        type: "plain_text",
+        text: user.name
+      },
+      value: user.id
+    }));
+
+    // Add "Unassigned" option
+    userOptions.unshift({
+      text: {
+        type: "plain_text",
+        text: "Unassigned"
+      },
+      value: "unassigned"
+    });
+
+    // Add "Keep current assignee" option
+    userOptions.unshift({
+      text: {
+        type: "plain_text",
+        text: "Keep current assignee"
+      },
+      value: "no_change"
+    });
+
+    // Create initial project options (all projects since "All Clients" is selected by default)
     const projectOptions = projects.map(project => ({
       text: {
         type: "plain_text",
-        text: `${project.name} (${project.clientName})`
+        text: `${project.name} (${project.status.replace('_', ' ')})`
       },
       value: project.id
     }));
@@ -42,6 +110,24 @@ const projectUpdateCommand = async ({ command, ack, client, body }) => {
         text: "Cancel"
       },
       blocks: [
+        {
+          type: "input",
+          block_id: "client_select",
+          element: {
+            type: "static_select",
+            action_id: "client_filter_dropdown",
+            placeholder: {
+              type: "plain_text",
+              text: "Select a client to filter projects"
+            },
+            options: clientOptions,
+            initial_option: clientOptions[0] // Default to "All Clients"
+          },
+          label: {
+            type: "plain_text",
+            text: "Client Filter"
+          }
+        },
         {
           type: "input",
           block_id: "project_select",
@@ -79,13 +165,31 @@ const projectUpdateCommand = async ({ command, ack, client, body }) => {
         },
         {
           type: "input",
+          block_id: "assigned_to",
+          element: {
+            type: "static_select",
+            action_id: "assignee_select",
+            placeholder: {
+              type: "plain_text",
+              text: "Select assignee"
+            },
+            options: userOptions,
+            initial_option: userOptions[0] // Default to "Keep current assignee"
+          },
+          label: {
+            type: "plain_text",
+            text: "Assigned To"
+          }
+        },
+        {
+          type: "input",
           block_id: "status_update",
           element: {
             type: "static_select",
             action_id: "status_select",
             placeholder: {
               type: "plain_text",
-              text: "Update project status (optional)"
+              text: "Select project status"
             },
             options: [
               {
@@ -141,9 +245,8 @@ const projectUpdateCommand = async ({ command, ack, client, body }) => {
           },
           label: {
             type: "plain_text",
-            text: "Status Change"
-          },
-          optional: true
+            text: "Project Status"
+          }
         }
       ]
     };
@@ -158,24 +261,113 @@ const projectUpdateCommand = async ({ command, ack, client, body }) => {
   } catch (error) {
     logger.error('Error opening project update modal:', error);
     
-    await client.chat.postEphemeral({
-      channel: command.channel_id,
-      user: command.user_id,
-      text: "❌ Sorry, there was an error opening the project update form. Please try again."
+    await respond({
+      text: "❌ Sorry, there was an error opening the project update form. Please try again.",
+      response_type: "ephemeral"
     });
   }
 };
 
-const handleProjectUpdateSubmission = async ({ ack, body, view, client }) => {
+// Handle client filter selection to update project dropdown
+const handleClientFilterSelection = async ({ ack, body, client }) => {
   await ack();
 
+  try {
+    const selectedClient = body.actions[0].selected_option.value;
+    
+    // Get projects based on client selection
+    let projects;
+    if (selectedClient === 'all_clients') {
+      projects = await projectService.getAllProjects();
+    } else if (selectedClient === 'no_clients') {
+      // No clients found, return empty array
+      projects = [];
+    } else {
+      // Filter projects by exact client name from database
+      projects = await projectService.getAllProjects({
+        clientName: selectedClient
+      });
+    }
+
+    // Create project options
+    const projectOptions = projects.map(project => ({
+      text: {
+        type: "plain_text",
+        text: `${project.name} (${project.status.replace('_', ' ')})`
+      },
+      value: project.id
+    }));
+
+    if (projectOptions.length === 0) {
+      projectOptions.push({
+        text: {
+          type: "plain_text",
+          text: "No projects found for this client"
+        },
+        value: "no_projects"
+      });
+    }
+
+    // Update the modal with filtered projects
+    const currentView = body.view;
+    const updatedBlocks = [...currentView.blocks];
+    
+    // Update the project dropdown (block index 1)
+    updatedBlocks[1] = {
+      ...updatedBlocks[1],
+      element: {
+        ...updatedBlocks[1].element,
+        placeholder: {
+          type: "plain_text",
+          text: projectOptions.length > 0 && projectOptions[0].value !== "no_projects" 
+            ? "Select a project to update" 
+            : "No projects available"
+        },
+        options: projectOptions
+      }
+    };
+
+    await client.views.update({
+      view_id: body.view.id,
+      view: {
+        ...currentView,
+        blocks: updatedBlocks
+      }
+    });
+
+    logger.info('Project dropdown updated for client filter', { 
+      selectedClient, 
+      projectCount: projects.length 
+    });
+
+  } catch (error) {
+    logger.error('Error updating project dropdown:', error);
+  }
+};
+
+const handleProjectUpdateSubmission = async ({ ack, body, view, client, slackService }) => {
   try {
     const values = view.state.values;
     
     // Extract form data
-    const projectId = values.project_select.project_dropdown.selected_option.value;
+    const projectId = values.project_select.project_dropdown.selected_option?.value;
     const updateContent = values.update_content.content_input.value;
-    const newStatus = values.status_update?.status_select?.selected_option?.value;
+    const newStatus = values.status_update.status_select.selected_option.value;
+    const newAssignee = values.assigned_to.assignee_select.selected_option.value;
+
+    // Validate project selection
+    if (!projectId || projectId === 'no_projects') {
+      await ack({
+        response_action: 'errors',
+        errors: {
+          project_select: 'Please select a valid project'
+        }
+      });
+      return;
+    }
+
+    // Acknowledge the submission after validation
+    await ack();
 
     // Ensure user exists in database
     const user = await userService.findOrCreateUser(body.user.id, {
@@ -195,12 +387,41 @@ const handleProjectUpdateSubmission = async ({ ack, body, view, client }) => {
       updateContent
     );
 
-    // Update project status if changed
-    let updatedProject = project;
+    // Handle assignee change
+    let assigneeDbId = project.assignedTo; // Keep current assignee by default
+    let assigneeChanged = false;
+    
+    if (newAssignee && newAssignee !== 'no_change') {
+      if (newAssignee === 'unassigned') {
+        assigneeDbId = null;
+        assigneeChanged = project.assignedTo !== null;
+      } else {
+        // Get assignee info from Slack and ensure they exist in database
+        const assigneeInfo = await slackService.getUserInfo(newAssignee);
+        if (assigneeInfo) {
+          const assigneeUser = await userService.findOrCreateUser(newAssignee, {
+            name: assigneeInfo.name,
+            email: assigneeInfo.email
+          });
+          assigneeDbId = assigneeUser.id;
+          assigneeChanged = project.assignedTo !== assigneeUser.id;
+        }
+      }
+    }
+
+    // Prepare update data
+    const updateData = {};
     if (newStatus && newStatus !== 'no_change' && newStatus !== project.status) {
-      updatedProject = await projectService.updateProject(projectId, {
-        status: newStatus
-      });
+      updateData.status = newStatus;
+    }
+    if (assigneeChanged) {
+      updateData.assignedTo = assigneeDbId;
+    }
+
+    // Update project if there are changes
+    let updatedProject = project;
+    if (Object.keys(updateData).length > 0) {
+      updatedProject = await projectService.updateProject(projectId, updateData);
     }
 
     // Format the response message
@@ -228,6 +449,30 @@ const handleProjectUpdateSubmission = async ({ ack, body, view, client }) => {
         text: {
           type: "mrkdwn",
           text: `*Status Updated:* ${project.status.replace('_', ' ')} → ${newStatus.replace('_', ' ')}`
+        }
+      });
+    }
+
+    // Add assignee change notification if applicable
+    if (assigneeChanged) {
+      const oldAssignee = project.assignee ? project.assignee.name : 'Unassigned';
+      let newAssigneeName = 'Unassigned';
+      
+      if (assigneeDbId && newAssignee !== 'unassigned') {
+        // Get the assignee name from the updated project or from Slack
+        if (updatedProject.assignee) {
+          newAssigneeName = updatedProject.assignee.name;
+        } else {
+          const assigneeInfo = await slackService.getUserInfo(newAssignee);
+          newAssigneeName = assigneeInfo ? assigneeInfo.name : 'Unknown User';
+        }
+      }
+      
+      responseBlocks.push({
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `*Assignee Updated:* ${oldAssignee} → ${newAssigneeName}`
         }
       });
     }
@@ -268,42 +513,16 @@ const handleProjectUpdateSubmission = async ({ ack, body, view, client }) => {
     // Send confirmation message as DM
     await client.chat.postMessage({
       channel: body.user.id,
+      text: `✅ Update added to "${project.name}"`,
       blocks: responseBlocks
     });
-
-    // Also post a summary to the channel where the command was used (if not a DM)
-    if (body.view.root_view_id) {
-      const channelId = body.view.private_metadata || command.channel_id;
-      
-      if (channelId && channelId !== body.user.id) {
-        await client.chat.postMessage({
-          channel: channelId,
-          text: `📝 ${body.user.name || 'Someone'} added an update to *${project.name}*`,
-          blocks: [
-            {
-              type: "section",
-              text: {
-                type: "mrkdwn",
-                text: `📝 *${body.user.name || 'Someone'}* added an update to *${project.name}* (${project.clientName})`
-              }
-            },
-            {
-              type: "section",
-              text: {
-                type: "mrkdwn",
-                text: `*Update:* ${updateContent.length > 150 ? updateContent.substring(0, 150) + '...' : updateContent}`
-              }
-            }
-          ]
-        });
-      }
-    }
 
     logger.info('Project update added successfully', { 
       projectId, 
       updateId: update.id,
       userId: user.id,
-      statusChanged: newStatus && newStatus !== 'no_change' && newStatus !== project.status
+      statusChanged: newStatus && newStatus !== 'no_change' && newStatus !== project.status,
+      assigneeChanged: assigneeChanged
     });
 
   } catch (error) {
@@ -319,5 +538,6 @@ const handleProjectUpdateSubmission = async ({ ack, body, view, client }) => {
 
 module.exports = {
   command: projectUpdateCommand,
-  handleSubmission: handleProjectUpdateSubmission
+  handleSubmission: handleProjectUpdateSubmission,
+  handleClientFilterSelection: handleClientFilterSelection
 }; 

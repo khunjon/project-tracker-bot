@@ -2,7 +2,7 @@ const projectService = require('../../services/projectService');
 const userService = require('../../services/userService');
 const logger = require('../../config/logger');
 
-const projectNewCommand = async ({ command, ack, client, body, slackService }) => {
+const projectNewCommand = async ({ command, ack, respond, client, body, slackService }) => {
   await ack();
 
   try {
@@ -257,10 +257,9 @@ const projectNewCommand = async ({ command, ack, client, body, slackService }) =
   } catch (error) {
     logger.error('Error opening project creation modal:', error);
     
-    await client.chat.postEphemeral({
-      channel: command.channel_id,
-      user: command.user_id,
-      text: "❌ Sorry, there was an error opening the project creation form. Please try again."
+    await respond({
+      text: "❌ Sorry, there was an error opening the project creation form. Please try again.",
+      response_type: "ephemeral"
     });
   }
 };

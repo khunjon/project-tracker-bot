@@ -30,7 +30,7 @@ class SlackApp {
   setupCommands() {
     // Register slash commands with slackService context
     this.app.command('/project-new', (args) => projectNewCommand.command({ ...args, slackService: this.slackService }));
-    this.app.command('/project-update', projectUpdateCommand.command);
+    this.app.command('/project-update', (args) => projectUpdateCommand.command({ ...args, slackService: this.slackService }));
     this.app.command('/project-list', projectListCommand.command);
 
     logger.info('Slack commands registered');
@@ -71,20 +71,156 @@ Just use any of the commands above to get started!`;
       // Only respond to direct messages (not in channels)
       if (message.channel_type === 'im' && !message.bot_id) {
         try {
-          const helpText = `👋 Hello! I'm your project management bot. 
+          const messageText = message.text.toLowerCase().trim();
+          
+          // Handle different types of messages
+          if (messageText.includes('help') || messageText === 'hi' || messageText === 'hello' || messageText === 'hey') {
+            const helpBlocks = [
+              {
+                type: "section",
+                text: {
+                  type: "mrkdwn",
+                  text: `👋 Hello! I'm your project management assistant. Here's what I can help you with:`
+                }
+              },
+              {
+                type: "section",
+                text: {
+                  type: "mrkdwn",
+                  text: `*Available Commands:*\n• \`/project-new\` - Create a new project\n• \`/project-update\` - Add an update to an existing project\n• \`/project-list\` - View all projects and their status`
+                }
+              },
+              {
+                type: "section",
+                text: {
+                  type: "mrkdwn",
+                  text: `*Quick Actions:*\nYou can also type simple messages like:\n• "show projects" or "list projects"\n• "create project"\n• "project status"\n• "help"`
+                }
+              },
+              {
+                type: "actions",
+                elements: [
+                  {
+                    type: "button",
+                    text: {
+                      type: "plain_text",
+                      text: "📋 View Projects"
+                    },
+                    action_id: "dm_view_projects",
+                    style: "primary"
+                  },
+                  {
+                    type: "button",
+                    text: {
+                      type: "plain_text",
+                      text: "➕ Create Project"
+                    },
+                    action_id: "dm_create_project"
+                  }
+                ]
+              }
+            ];
 
-Use these commands to manage your projects:
-• \`/project-new\` - Create a new project
-• \`/project-update\` - Update a project
-• \`/project-list\` - View all projects
+            await say({ blocks: helpBlocks });
+          } else if (messageText.includes('project') && (messageText.includes('list') || messageText.includes('show') || messageText.includes('view'))) {
+            // Trigger project list
+            await projectListCommand.command({
+              command: { channel_id: message.channel, user_id: message.user },
+              ack: async () => {},
+              respond: async (response) => {
+                await say(response);
+              },
+              client,
+              body: { user_id: message.user }
+            });
+          } else if (messageText.includes('create') && messageText.includes('project')) {
+            await say({
+              text: "To create a new project, use the `/project-new` command, or click the button below:",
+              blocks: [
+                {
+                  type: "section",
+                  text: {
+                    type: "mrkdwn",
+                    text: "To create a new project, use the `/project-new` command, or click the button below:"
+                  }
+                },
+                {
+                  type: "actions",
+                  elements: [
+                    {
+                      type: "button",
+                      text: {
+                        type: "plain_text",
+                        text: "➕ Create Project"
+                      },
+                      action_id: "dm_create_project",
+                      style: "primary"
+                    }
+                  ]
+                }
+              ]
+            });
+          } else if (messageText.includes('status') || messageText.includes('update')) {
+            await say({
+              text: "To update a project or check status, use the `/project-update` or `/project-list` commands:",
+              blocks: [
+                {
+                  type: "section",
+                  text: {
+                    type: "mrkdwn",
+                    text: "To update a project or check status, use these commands:"
+                  }
+                },
+                {
+                  type: "actions",
+                  elements: [
+                    {
+                      type: "button",
+                      text: {
+                        type: "plain_text",
+                        text: "📋 View Projects"
+                      },
+                      action_id: "dm_view_projects"
+                    },
+                    {
+                      type: "button",
+                      text: {
+                        type: "plain_text",
+                        text: "📝 Update Project"
+                      },
+                      action_id: "dm_update_project"
+                    }
+                  ]
+                }
+              ]
+            });
+          } else {
+            // Default response for unrecognized messages
+            await say({
+              text: `I didn't quite understand that. Type "help" to see what I can do, or use one of these commands:`,
+              blocks: [
+                {
+                  type: "section",
+                  text: {
+                    type: "mrkdwn",
+                    text: `I didn't quite understand that. Type "help" to see what I can do, or use one of these commands:`
+                  }
+                },
+                {
+                  type: "section",
+                  text: {
+                    type: "mrkdwn",
+                    text: `• \`/project-new\` - Create a new project\n• \`/project-update\` - Update a project\n• \`/project-list\` - View all projects`
+                  }
+                }
+              ]
+            });
+          }
 
-You can use these commands in any channel or here in our DM!`;
-
-          await say(helpText);
-
-          logger.info('Direct message handled', { userId: message.user });
+          logger.info('Direct message handled', { userId: message.user, messageText });
         } catch (error) {
           logger.error('Error handling direct message:', error);
+          await say("Sorry, I encountered an error. Please try again or use the slash commands.");
         }
       }
     });
@@ -95,7 +231,10 @@ You can use these commands in any channel or here in our DM!`;
   setupInteractions() {
     // Handle modal submissions
     this.app.view('project_new_modal', (args) => projectNewCommand.handleSubmission({ ...args, slackService: this.slackService }));
-    this.app.view('project_update_modal', projectUpdateCommand.handleSubmission);
+    this.app.view('project_update_modal', (args) => projectUpdateCommand.handleSubmission({ ...args, slackService: this.slackService }));
+
+    // Handle dropdown interactions
+    this.app.action('client_filter_dropdown', projectUpdateCommand.handleClientFilterSelection);
 
     // Handle button interactions
     this.app.action('view_project_details', projectListCommand.handleViewProjectDetails);
@@ -139,6 +278,47 @@ You can use these commands in any channel or here in our DM!`;
         });
       } catch (error) {
         logger.error('Error handling create new project digest button:', error);
+      }
+    });
+
+    // Handle DM button interactions
+    this.app.action('dm_view_projects', async ({ ack, body, client, say }) => {
+      await ack();
+      
+      try {
+        // Trigger project list command in DM
+        await projectListCommand.command({
+          command: { channel_id: body.channel.id, user_id: body.user.id },
+          ack: async () => {},
+          respond: async (response) => {
+            await say(response);
+          },
+          client,
+          body: { user_id: body.user.id }
+        });
+      } catch (error) {
+        logger.error('Error handling DM view projects button:', error);
+        await say("Sorry, there was an error retrieving the project list. Please try the `/project-list` command.");
+      }
+    });
+
+    this.app.action('dm_create_project', async ({ ack, body, client, say }) => {
+      await ack();
+      
+      try {
+        await say("To create a new project, please use the `/project-new` command. This will open an interactive form where you can enter all the project details.");
+      } catch (error) {
+        logger.error('Error handling DM create project button:', error);
+      }
+    });
+
+    this.app.action('dm_update_project', async ({ ack, body, client, say }) => {
+      await ack();
+      
+      try {
+        await say("To update a project, please use the `/project-update` command. This will show you a list of projects to choose from and let you add updates.");
+      } catch (error) {
+        logger.error('Error handling DM update project button:', error);
       }
     });
 
