@@ -11,8 +11,7 @@ const requiredEnvVars = [
   'SLACK_BOT_TOKEN',
   'SLACK_SIGNING_SECRET',
   'SLACK_APP_TOKEN',
-  'DATABASE_URL',
-  'OPENAI_API_KEY'
+  'DATABASE_URL'
 ];
 
 const missingEnvVars = requiredEnvVars.filter(envVar => !process.env[envVar]);
@@ -101,6 +100,7 @@ class ProjectTrackerBot {
         name: 'Project Tracker Bot',
         description: 'Slack bot for project management with PostgreSQL and OpenAI integration',
         version: '1.0.0',
+        environment: process.env.NODE_ENV || 'development',
         endpoints: {
           health: '/health',
           status: '/status',

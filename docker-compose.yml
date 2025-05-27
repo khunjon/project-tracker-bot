@@ -1,3 +1,7 @@
+# Docker Compose for Local Development (Optional)
+# Note: This is only needed if you want to run locally instead of using Railway
+# For Railway-only development, you don't need this file
+
 version: '3.8'
 
 services:
@@ -7,24 +11,26 @@ services:
       - "3000:3000"
     environment:
       - NODE_ENV=development
-      - DATABASE_URL=postgresql://postgres:password@db:5432/project_tracker
-    depends_on:
-      - db
+      # Use your Railway DATABASE_URL here, or local database
+      - DATABASE_URL=${DATABASE_URL}
     volumes:
       - ./logs:/app/logs
     restart: unless-stopped
+    # Removed local database dependency since you're using Railway
 
-  db:
-    image: postgres:15-alpine
-    environment:
-      - POSTGRES_DB=project_tracker
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=password
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    restart: unless-stopped
+  # Optional: Local database for testing (if not using Railway)
+  # Uncomment if you want a local database for development
+  # db:
+  #   image: postgres:15-alpine
+  #   environment:
+  #     - POSTGRES_DB=project_tracker
+  #     - POSTGRES_USER=postgres
+  #     - POSTGRES_PASSWORD=password
+  #   ports:
+  #     - "5432:5432"
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   restart: unless-stopped
 
-volumes:
-  postgres_data: 
+# volumes:
+#   postgres_data: 
