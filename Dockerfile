@@ -1,4 +1,10 @@
-FROM node:18-alpine
+FROM node:18-slim
+
+# Install OpenSSL and other dependencies
+RUN apt-get update && apt-get install -y \
+    openssl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /app
@@ -11,6 +17,10 @@ RUN npm ci --only=production
 
 # Copy source code
 COPY . .
+
+# Set Prisma environment variables
+ENV PRISMA_CLI_BINARY_TARGETS="debian-openssl-1.1.x"
+ENV PRISMA_QUERY_ENGINE_BINARY="debian-openssl-1.1.x"
 
 # Generate Prisma client
 RUN npx prisma generate

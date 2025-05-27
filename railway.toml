@@ -5,4 +5,8 @@ builder = "nixpacks"
 cmds = ["npm run db:generate"]
 
 [deploy]
-startCommand = "npm start" 
+startCommand = "npm start"
+
+[deploy.env]
+PRISMA_CLI_BINARY_TARGETS = "debian-openssl-1.1.x"
+PRISMA_QUERY_ENGINE_BINARY = "debian-openssl-1.1.x" 
