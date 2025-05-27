@@ -83,7 +83,6 @@ A comprehensive Slack bot for project management with PostgreSQL database integr
 - Automatic analysis of project updates using OpenAI GPT-4o-mini
 - Risk identification and opportunity detection
 - Weekly digest generation with actionable insights
-- AI-powered project portfolio summaries in `/project-list`
 - Individual project AI summaries in "View Details" for focused insights
 
 ### **📊 Automated Reporting**
@@ -111,7 +110,7 @@ The bot will start on `http://localhost:3000` with auto-reload enabled.
    ```
    /project-list
    ```
-   Shows all projects grouped by status with interactive "View Details" buttons and AI-generated portfolio summary. Each "View Details" includes project-specific AI insights.
+   Shows all projects grouped by status with interactive "View Details" buttons. Each "View Details" includes project-specific AI insights.
 
 3. **Update a Project:**
    ```

@@ -20,26 +20,13 @@ const projectListCommand = async ({ command, ack, respond, client, body }) => {
     // Get project statistics
     const stats = await projectService.getProjectStats();
 
-    // Get recent updates for AI summary
-    const recentUpdates = await projectService.getRecentUpdates(7, 10);
-
-    // Generate AI summary
-    const aiSummary = await openaiService.generateProjectListSummary(projects, recentUpdates);
-
-    // Create the header block with AI summary
+    // Create the header block
     const blocks = [
       {
         type: "section",
         text: {
           type: "mrkdwn",
           text: `📋 *Project Portfolio Overview*\n\n*Total Projects:* ${stats.total} | *Active:* ${stats.active} | *Completed:* ${stats.byStatus.completed}`
-        }
-      },
-      {
-        type: "section",
-        text: {
-          type: "mrkdwn",
-          text: `🤖 *AI Portfolio Summary:*\n_${aiSummary}_`
         }
       },
       {
