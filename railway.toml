@@ -11,8 +11,8 @@ restartPolicyMaxRetries = 3
 
 [deploy.healthcheck]
 path = "/health"
-intervalSeconds = 30
-timeoutSeconds = 10
+intervalSeconds = 60
+timeoutSeconds = 15
 
 [deploy.env]
 NODE_ENV = "production"

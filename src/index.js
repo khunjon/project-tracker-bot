@@ -46,38 +46,49 @@ class ProjectTrackerBot {
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: true }));
 
-    // Health check endpoint
-    this.app.get('/health', async (req, res) => {
+    // Health check endpoint (simple, no database check to avoid connection issues)
+    this.app.get('/health', (req, res) => {
+      // Log health checks from Railway (but not too frequently)
+      const userAgent = req.headers['user-agent'] || '';
+      if (userAgent.includes('Railway') || userAgent.includes('health')) {
+        logger.debug('🏥 Railway health check received');
+      }
+      
+      const status = {
+        status: 'healthy',
+        timestamp: new Date().toISOString(),
+        uptime: process.uptime(),
+        environment: process.env.NODE_ENV || 'development',
+        slack: this.slackApp ? this.slackApp.getStatus() : { isRunning: false }
+      };
+      
+      res.json(status);
+    });
+
+    // Database health check endpoint (separate from main health check)
+    this.app.get('/health/database', async (req, res) => {
       try {
         // Test database connection with timeout
         const { prisma } = require('./config/database');
         const queryPromise = prisma.$queryRaw`SELECT 1 as health_check`;
         const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Health check timeout')), 5000);
+          setTimeout(() => reject(new Error('Database health check timeout')), 5000);
         });
         
         await Promise.race([queryPromise, timeoutPromise]);
         
-        const status = {
+        res.json({
           status: 'healthy',
-          timestamp: new Date().toISOString(),
-          uptime: process.uptime(),
-          environment: process.env.NODE_ENV || 'development',
           database: 'connected',
-          slack: this.slackApp ? this.slackApp.getStatus() : { isRunning: false }
-        };
-        
-        res.json(status);
+          timestamp: new Date().toISOString()
+        });
       } catch (error) {
-        logger.error('Health check failed:', error);
+        logger.error('Database health check failed:', error);
         res.status(503).json({
           status: 'unhealthy',
-          timestamp: new Date().toISOString(),
-          uptime: process.uptime(),
-          environment: process.env.NODE_ENV || 'development',
           database: 'disconnected',
-          slack: this.slackApp ? this.slackApp.getStatus() : { isRunning: false },
-          error: error.message
+          error: error.message,
+          timestamp: new Date().toISOString()
         });
       }
     });
@@ -135,6 +146,20 @@ class ProjectTrackerBot {
           message: error.message 
         });
       }
+    });
+
+    // Manual shutdown trigger endpoint (for testing)
+    this.app.post('/shutdown', (req, res) => {
+      logger.info('🛑 Manual shutdown requested via API');
+      res.json({ 
+        success: true, 
+        message: 'Shutdown initiated' 
+      });
+      
+      // Trigger shutdown after response is sent
+      setTimeout(() => {
+        process.kill(process.pid, 'SIGTERM');
+      }, 100);
     });
 
     // Root endpoint
@@ -221,9 +246,10 @@ class ProjectTrackerBot {
   setupKeepAlive() {
     // Send periodic health checks to prevent Railway from sleeping
     if (process.env.NODE_ENV === 'production') {
-      setInterval(() => {
+      this.keepAliveInterval = setInterval(() => {
         logger.debug('Keep-alive ping');
       }, 25 * 60 * 1000); // Every 25 minutes
+      logger.info('✅ Keep-alive interval started');
     }
   }
 
@@ -306,17 +332,22 @@ async function gracefulShutdown(signal) {
   
   isShuttingDown = true;
   logger.info(`🛑 ${signal} received from Railway, starting graceful shutdown`);
+  logger.info(`📊 Process stats at shutdown: PID=${process.pid}, uptime=${Math.floor(process.uptime())}s`);
   
   // Set a timeout to force exit if graceful shutdown takes too long
   shutdownTimeout = setTimeout(() => {
-    logger.error('⏰ Graceful shutdown timeout, forcing exit');
+    logger.error('⏰ Graceful shutdown timeout (25s), forcing exit');
+    logger.error('💀 This may indicate hanging connections or processes');
     process.exit(1);
   }, 25000); // 25 seconds timeout for Railway
   
   try {
+    const shutdownStart = Date.now();
     await bot.stop();
+    const shutdownDuration = Date.now() - shutdownStart;
+    
     clearTimeout(shutdownTimeout);
-    logger.info('✅ Graceful shutdown completed successfully');
+    logger.info(`✅ Graceful shutdown completed successfully in ${shutdownDuration}ms`);
     process.exit(0);
   } catch (error) {
     clearTimeout(shutdownTimeout);
