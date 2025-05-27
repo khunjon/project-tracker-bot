@@ -11,10 +11,10 @@ const projectNewCommand = async ({ command, ack, respond, client, body, slackSer
     // Parse optional project name from command text
     const projectNameFromCommand = command.text ? command.text.trim() : '';
     
-    // Get workspace users for assignee dropdown
+    // Get workspace users for project lead dropdown
     const workspaceUsers = await slackService.getWorkspaceUsers();
     
-    // Get current user info to set as default assignee
+    // Get current user info to set as default project lead
     const currentUser = await slackService.getUserInfo(command.user_id);
     
     // Get client channels for client dropdown
@@ -34,11 +34,11 @@ const projectNewCommand = async ({ command, ack, respond, client, body, slackSer
       value: user.id
     }));
 
-    // Add "Unassigned" option
+    // Add "No Project Lead" option
     userOptions.unshift({
       text: {
         type: "plain_text",
-        text: "Unassigned"
+        text: "No Project Lead"
       },
       value: "unassigned"
     });
@@ -73,8 +73,8 @@ const projectNewCommand = async ({ command, ack, respond, client, body, slackSer
       });
     }
 
-    // Find default assignee (current user)
-    const defaultAssignee = currentUser ? userOptions.find(option => option.value === currentUser.id) : null;
+    // Find default project lead (current user)
+    const defaultProjectLead = currentUser ? userOptions.find(option => option.value === currentUser.id) : null;
 
     const modal = {
       type: "modal",
@@ -218,14 +218,14 @@ const projectNewCommand = async ({ command, ack, respond, client, body, slackSer
             action_id: "assignee_select",
             placeholder: {
               type: "plain_text",
-              text: "Select assignee"
+              text: "Select project lead"
             },
             options: userOptions,
-            ...(defaultAssignee && { initial_option: defaultAssignee })
+            ...(defaultProjectLead && { initial_option: defaultProjectLead })
           },
           label: {
             type: "plain_text",
-            text: "Assigned To"
+            text: "Project Lead"
           },
           optional: true
         },
@@ -320,10 +320,10 @@ const handleProjectNewSubmission = async ({ ack, body, view, client, slackServic
       name: body.user.name || body.user.username
     });
 
-    // If someone is assigned, ensure they exist in database too
+    // If someone is assigned as project lead, ensure they exist in database too
     let assigneeDbId = null;
     if (projectData.assignedTo && projectData.assignedTo !== 'unassigned') {
-      // Get assignee info from Slack
+      // Get project lead info from Slack
       const assigneeInfo = await slackService.getUserInfo(projectData.assignedTo);
       if (assigneeInfo) {
         const assigneeUser = await userService.findOrCreateUser(projectData.assignedTo, {
@@ -348,10 +348,10 @@ const handleProjectNewSubmission = async ({ ack, body, view, client, slackServic
       ? new Date(project.deadline).toLocaleDateString()
       : 'No deadline set';
 
-    // Format assignee for display
+    // Format project lead for display
     const assigneeText = project.assignee 
       ? project.assignee.name 
-      : 'Unassigned';
+      : 'No Project Lead';
 
     // Send confirmation message
     const confirmationBlocks = [
@@ -375,7 +375,7 @@ const handleProjectNewSubmission = async ({ ack, body, view, client, slackServic
           },
           {
             type: "mrkdwn",
-            text: `*Assigned To:*\n${assigneeText}`
+            text: `*Project Lead:*\n${assigneeText}`
           },
           {
             type: "mrkdwn",

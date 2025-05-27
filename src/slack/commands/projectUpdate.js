@@ -20,7 +20,7 @@ const projectUpdateCommand = async ({ command, ack, respond, client, body, slack
     // Get unique clients from database (clients that actually have projects)
     const uniqueClients = await projectService.getUniqueClients();
     
-    // Get workspace users for assignee dropdown
+    // Get workspace users for project lead dropdown
     const workspaceUsers = await slackService.getWorkspaceUsers();
     
     logger.info('Data retrieved for project update', { 
@@ -67,20 +67,20 @@ const projectUpdateCommand = async ({ command, ack, respond, client, body, slack
       value: user.id
     }));
 
-    // Add "Unassigned" option
+    // Add "No Project Lead" option
     userOptions.unshift({
       text: {
         type: "plain_text",
-        text: "Unassigned"
+        text: "No Project Lead"
       },
       value: "unassigned"
     });
 
-    // Add "Keep current assignee" option
+    // Add "Keep current project lead" option
     userOptions.unshift({
       text: {
         type: "plain_text",
-        text: "Keep current assignee"
+        text: "Keep current project lead"
       },
       value: "no_change"
     });
@@ -171,14 +171,14 @@ const projectUpdateCommand = async ({ command, ack, respond, client, body, slack
             action_id: "assignee_select",
             placeholder: {
               type: "plain_text",
-              text: "Select assignee"
+              text: "Select project lead"
             },
             options: userOptions,
-            initial_option: userOptions[0] // Default to "Keep current assignee"
+            initial_option: userOptions[0] // Default to "Keep current project lead"
           },
           label: {
             type: "plain_text",
-            text: "Assigned To"
+            text: "Project Lead"
           }
         },
         {
@@ -387,8 +387,8 @@ const handleProjectUpdateSubmission = async ({ ack, body, view, client, slackSer
       updateContent
     );
 
-    // Handle assignee change
-    let assigneeDbId = project.assignedTo; // Keep current assignee by default
+    // Handle project lead change
+          let assigneeDbId = project.assignedTo; // Keep current project lead by default
     let assigneeChanged = false;
     
     if (newAssignee && newAssignee !== 'no_change') {
@@ -396,7 +396,7 @@ const handleProjectUpdateSubmission = async ({ ack, body, view, client, slackSer
         assigneeDbId = null;
         assigneeChanged = project.assignedTo !== null;
       } else {
-        // Get assignee info from Slack and ensure they exist in database
+        // Get project lead info from Slack and ensure they exist in database
         const assigneeInfo = await slackService.getUserInfo(newAssignee);
         if (assigneeInfo) {
           const assigneeUser = await userService.findOrCreateUser(newAssignee, {
@@ -453,13 +453,13 @@ const handleProjectUpdateSubmission = async ({ ack, body, view, client, slackSer
       });
     }
 
-    // Add assignee change notification if applicable
+    // Add project lead change notification if applicable
     if (assigneeChanged) {
-      const oldAssignee = project.assignee ? project.assignee.name : 'Unassigned';
-      let newAssigneeName = 'Unassigned';
+      const oldAssignee = project.assignee ? project.assignee.name : 'No Project Lead';
+      let newAssigneeName = 'No Project Lead';
       
       if (assigneeDbId && newAssignee !== 'unassigned') {
-        // Get the assignee name from the updated project or from Slack
+        // Get the project lead name from the updated project or from Slack
         if (updatedProject.assignee) {
           newAssigneeName = updatedProject.assignee.name;
         } else {
@@ -472,7 +472,7 @@ const handleProjectUpdateSubmission = async ({ ack, body, view, client, slackSer
         type: "section",
         text: {
           type: "mrkdwn",
-          text: `*Assignee Updated:* ${oldAssignee} → ${newAssigneeName}`
+          text: `*Project Lead Updated:* ${oldAssignee} → ${newAssigneeName}`
         }
       });
     }

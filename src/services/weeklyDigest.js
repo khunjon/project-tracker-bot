@@ -140,7 +140,7 @@ class WeeklyDigestService {
 
       if (planning.length > 0) {
         const planningText = planning.map(p => 
-          `• ${p.name} (${p.clientName})${p.assignee ? ` - ${p.assignee.name}` : ''}`
+          `• ${p.name} (${p.clientName})${p.assignee ? ` - Project Lead: ${p.assignee.name}` : ''}`
         ).join('\n');
         
         blocks.push({
@@ -154,7 +154,7 @@ class WeeklyDigestService {
 
       if (inProgress.length > 0) {
         const inProgressText = inProgress.map(p => 
-          `• ${p.name} (${p.clientName})${p.assignee ? ` - ${p.assignee.name}` : ''}`
+          `• ${p.name} (${p.clientName})${p.assignee ? ` - Project Lead: ${p.assignee.name}` : ''}`
         ).join('\n');
         
         blocks.push({

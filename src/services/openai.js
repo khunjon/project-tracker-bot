@@ -133,7 +133,7 @@ Keep it professional and actionable, suitable for a team channel.
 Analyze the current project portfolio and provide a concise summary in 3-4 sentences:
 
 Active Projects (${projects.length}):
-${projects.map(p => `- ${p.name} (${p.clientName}) - Status: ${p.status}${p.assignee ? ` - Assigned to: ${p.assignee.name}` : ' - Unassigned'}${p.deadline ? ` - Deadline: ${new Date(p.deadline).toLocaleDateString()}` : ''}`).join('\n')}
+${projects.map(p => `- ${p.name} (${p.clientName}) - Status: ${p.status}${p.assignee ? ` - Project Lead: ${p.assignee.name}` : ' - No Project Lead'}${p.deadline ? ` - Deadline: ${new Date(p.deadline).toLocaleDateString()}` : ''}`).join('\n')}
 
 Recent Updates (${recentUpdates.length}):
 ${recentUpdates.map(u => `- ${u.project.name}: ${u.content.substring(0, 150)}...`).join('\n')}
@@ -182,7 +182,7 @@ Keep it to 3-4 sentences maximum. Be professional and actionable.
 
   async generateProjectDetailSummary(project) {
     try {
-      const assigneeText = project.assignee ? project.assignee.name : 'Unassigned';
+      const assigneeText = project.assignee ? project.assignee.name : 'No Project Lead';
       const deadlineText = project.deadline 
         ? new Date(project.deadline).toLocaleDateString()
         : 'No deadline set';
@@ -200,7 +200,7 @@ You are analyzing a project to provide actionable insights. Focus on the CONTENT
 
 PROJECT: ${project.name} for ${project.clientName}
 STATUS: ${project.status}
-ASSIGNED TO: ${assigneeText}
+PROJECT LEAD: ${assigneeText}
 DEADLINE: ${deadlineText}
 DESCRIPTION: ${project.description || 'No description provided'}
 
@@ -252,10 +252,10 @@ Focus on the SUBSTANCE of what's happening, not just metadata. Be specific about
           ? latestUpdate.content.substring(0, 100) + '...' 
           : latestUpdate.content;
         
-        return `Latest update from ${latestUpdate.user.name} on ${updateDate}: "${updatePreview}" This ${project.status.replace('_', ' ').toLowerCase()} project has ${project.updates.length} recorded updates. ${project.assignee ? `Currently assigned to ${project.assignee.name}.` : 'Currently unassigned.'}`;
+        return `Latest update from ${latestUpdate.user.name} on ${updateDate}: "${updatePreview}" This ${project.status.replace('_', ' ').toLowerCase()} project has ${project.updates.length} recorded updates. ${project.assignee ? `Current project lead: ${project.assignee.name}.` : 'Currently no project lead assigned.'}`;
       } else {
         const statusText = project.status.replace('_', ' ').toLowerCase();
-        return `This ${statusText} project for ${project.clientName} has no updates yet. ${project.assignee ? `Assigned to ${project.assignee.name}.` : 'Currently unassigned.'} ${project.description ? `Project focus: ${project.description.substring(0, 100)}${project.description.length > 100 ? '...' : ''}` : ''}`;
+        return `This ${statusText} project for ${project.clientName} has no updates yet. ${project.assignee ? `Project lead: ${project.assignee.name}.` : 'Currently no project lead assigned.'} ${project.description ? `Project focus: ${project.description.substring(0, 100)}${project.description.length > 100 ? '...' : ''}` : ''}`;
       }
     }
   }

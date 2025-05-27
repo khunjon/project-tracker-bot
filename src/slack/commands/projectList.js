@@ -77,7 +77,7 @@ const projectListCommand = async ({ command, ack, respond, client, body }) => {
 
         // Add each project in this status
         statusProjects.forEach(project => {
-          const assigneeText = project.assignee ? project.assignee.name : 'Unassigned';
+          const assigneeText = project.assignee ? project.assignee.name : 'No Project Lead';
           const deadlineText = project.deadline 
             ? new Date(project.deadline).toLocaleDateString()
             : 'No deadline';
@@ -204,7 +204,7 @@ const handleViewProjectDetails = async ({ ack, body, client }) => {
     const aiSummary = await openaiService.generateProjectDetailSummary(project);
 
     // Format project details
-    const assigneeText = project.assignee ? project.assignee.name : 'Unassigned';
+    const assigneeText = project.assignee ? project.assignee.name : 'No Project Lead';
     const deadlineText = project.deadline 
       ? new Date(project.deadline).toLocaleDateString()
       : 'No deadline set';
@@ -239,7 +239,7 @@ const handleViewProjectDetails = async ({ ack, body, client }) => {
           },
           {
             type: "mrkdwn",
-            text: `*Assigned To:*\n${assigneeText}`
+            text: `*Project Lead:*\n${assigneeText}`
           },
           {
             type: "mrkdwn",
