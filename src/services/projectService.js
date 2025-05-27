@@ -299,6 +299,44 @@ class ProjectService {
       throw error;
     }
   }
+
+  async getActiveProjectsByClient() {
+    try {
+      const activeProjects = await prisma.project.findMany({
+        where: {
+          status: {
+            in: ['PLANNING', 'IN_PROGRESS']
+          }
+        },
+        select: {
+          clientName: true
+        }
+      });
+
+      // Group by client and count
+      const clientCounts = {};
+      activeProjects.forEach(project => {
+        clientCounts[project.clientName] = (clientCounts[project.clientName] || 0) + 1;
+      });
+
+      // Sort by count (descending) then by client name
+      const sortedClients = Object.entries(clientCounts)
+        .sort(([a, countA], [b, countB]) => {
+          if (countB !== countA) return countB - countA;
+          return a.localeCompare(b);
+        });
+
+      logger.info('Active projects by client fetched', { 
+        clientCount: sortedClients.length,
+        totalActiveProjects: activeProjects.length
+      });
+
+      return sortedClients;
+    } catch (error) {
+      logger.error('Error getting active projects by client:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new ProjectService(); 

@@ -247,6 +247,9 @@ Just use any of the commands above to get started!`;
       const projectService = require('../services/projectService');
       const stats = await projectService.getProjectStats();
       
+      // Get active projects by client
+      const activeProjectsByClient = await projectService.getActiveProjectsByClient();
+      
       // Get recent projects (last 5)
       const recentProjects = await projectService.getAllProjects();
       const sortedProjects = recentProjects
@@ -274,62 +277,80 @@ Just use any of the commands above to get started!`;
             type: "mrkdwn",
             text: `📊 *Portfolio Overview*`
           }
-        },
-        {
-          type: "section",
-          fields: [
-            {
-              type: "mrkdwn",
-              text: `*Total Projects:*\n${stats.total}`
-            },
-            {
-              type: "mrkdwn",
-              text: `*Active Projects:*\n${stats.active}`
-            },
-            {
-              type: "mrkdwn",
-              text: `*In Progress:*\n${stats.byStatus.inProgress}`
-            },
-            {
-              type: "mrkdwn",
-              text: `*Completed:*\n${stats.byStatus.completed}`
-            }
-          ]
-        },
-        {
-          type: "actions",
-          elements: [
-            {
-              type: "button",
-              text: {
-                type: "plain_text",
-                text: "📋 View All Projects",
-                emoji: true
-              },
-              action_id: "home_view_projects",
-              style: "primary"
-            },
-            {
-              type: "button",
-              text: {
-                type: "plain_text",
-                text: "➕ Create Project",
-                emoji: true
-              },
-              action_id: "home_create_project"
-            },
-            {
-              type: "button",
-              text: {
-                type: "plain_text",
-                text: "📝 Update Project",
-                emoji: true
-              },
-              action_id: "home_update_project"
-            }
-          ]
         }
       ];
+
+      // Add active projects by client section
+      if (activeProjectsByClient.length > 0) {
+        // Create fields for the client breakdown (max 10 fields in Slack blocks)
+        const clientFields = activeProjectsByClient.slice(0, 10).map(([clientName, count]) => ({
+          type: "mrkdwn",
+          text: `*${clientName}:*\n${count} active project${count > 1 ? 's' : ''}`
+        }));
+
+        blocks.push({
+          type: "section",
+          fields: clientFields
+        });
+
+        // If there are more than 10 clients, show a summary
+        if (activeProjectsByClient.length > 10) {
+          const remainingClients = activeProjectsByClient.length - 10;
+          const remainingProjects = activeProjectsByClient.slice(10).reduce((sum, [, count]) => sum + count, 0);
+          
+          blocks.push({
+            type: "context",
+            elements: [
+              {
+                type: "mrkdwn",
+                text: `_+${remainingClients} more clients with ${remainingProjects} active projects_`
+              }
+            ]
+          });
+        }
+      } else {
+        blocks.push({
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: "No active projects at the moment."
+          }
+        });
+      }
+
+      blocks.push({
+        type: "actions",
+        elements: [
+          {
+            type: "button",
+            text: {
+              type: "plain_text",
+              text: "📋 View All Projects",
+              emoji: true
+            },
+            action_id: "home_view_projects",
+            style: "primary"
+          },
+          {
+            type: "button",
+            text: {
+              type: "plain_text",
+              text: "➕ Create Project",
+              emoji: true
+            },
+            action_id: "home_create_project"
+          },
+          {
+            type: "button",
+            text: {
+              type: "plain_text",
+              text: "📝 Update Project",
+              emoji: true
+            },
+            action_id: "home_update_project"
+          }
+        ]
+      });
 
       // Add recent projects section if there are any
       if (sortedProjects.length > 0) {
@@ -393,11 +414,12 @@ Just use any of the commands above to get started!`;
 
         recentUpdates.forEach(update => {
           const updateDate = new Date(update.createdAt).toLocaleDateString();
+          const truncatedContent = update.content.length > 150 ? update.content.substring(0, 150) + '...' : update.content;
           blocks.push({
             type: "section",
             text: {
               type: "mrkdwn",
-              text: `*${update.project.name}*\n${update.user.name} • ${updateDate}\n${update.content.substring(0, 150)}${update.content.length > 150 ? '...' : ''}`
+              text: `*${update.project.clientName} - ${update.project.name}*\n${update.user.name} • ${updateDate}\n${truncatedContent}`
             }
           });
         });
