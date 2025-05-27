@@ -11,6 +11,13 @@ A comprehensive Slack bot for project management with PostgreSQL database integr
 - **`/project-update`** - Add updates to existing projects with AI analysis
 - **`/project-list`** - View all projects with interactive details
 
+### 🏠 Home Tab Dashboard
+- **Interactive project dashboard** - Click the bot's "Home" tab for a personalized view
+- **Portfolio overview** - Real-time project statistics and status summary
+- **Recent projects** - Quick access to your 5 most recently updated projects
+- **Recent activity** - Latest project updates and team activity
+- **Quick actions** - One-click buttons to view projects, create new ones, or add updates
+
 ### 🧠 AI-Powered Analysis
 - Automatic project update analysis using OpenAI
 - Risk identification and opportunity detection
@@ -106,14 +113,16 @@ GENERAL_CHANNEL_ID=C1234567890
 
 1. **Create Slack App** at [api.slack.com/apps](https://api.slack.com/apps)
 2. **Enable Socket Mode** and create App-Level Token
-3. **Add Bot Scopes:** `chat:write`, `commands`, `app_mentions:read`, `channels:read`, `im:read`, `im:write`, `users:read`
-4. **Create Slash Commands:**
+3. **Enable Home Tab** in App Home settings
+4. **Add Bot Scopes:** `chat:write`, `commands`, `app_mentions:read`, `channels:read`, `im:read`, `im:write`, `users:read`
+5. **Subscribe to Bot Events:** `app_mention`, `message.im`, `app_home_opened`
+6. **Create Slash Commands:**
    - `/project-new` → `https://your-app.railway.app/slack/events`
    - `/project-update` → `https://your-app.railway.app/slack/events`
    - `/project-list` → `https://your-app.railway.app/slack/events`
    
    **Note**: Replace `your-app.railway.app` with your actual Railway deployment URL
-5. **Install App to Workspace**
+7. **Install App to Workspace**
 
 ## Development Workflow
 
@@ -130,6 +139,7 @@ git push                       # Auto-deploys to Railway
 
 ### Testing
 - Test commands in DMs with the bot first
+- **Test Home Tab** - Click on the bot in your sidebar, then click "Home" tab
 - Use a dedicated `#bot-testing` channel for experiments
 - Announce to team when testing new features
 - Small commits for easy rollbacks
