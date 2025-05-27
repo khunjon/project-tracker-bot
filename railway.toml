@@ -13,6 +13,7 @@ restartPolicyMaxRetries = 3
 path = "/health"
 intervalSeconds = 60
 timeoutSeconds = 15
+initialDelaySeconds = 30
 
 [deploy.env]
 NODE_ENV = "production"

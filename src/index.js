@@ -224,6 +224,44 @@ class ProjectTrackerBot {
         logger.info(`📊 Weekly digest scheduled for Mondays at 9:00 AM`);
         logger.info(`🏥 Health check available at /health`);
         logger.info(`📊 Status endpoint available at /status`);
+        
+        // Log Railway-specific information
+        logger.info(`🚂 Railway deployment info:`);
+        logger.info(`   - PORT: ${port}`);
+        logger.info(`   - RAILWAY_DEPLOYMENT_ID: ${process.env.RAILWAY_DEPLOYMENT_ID || 'unknown'}`);
+        logger.info(`   - RAILWAY_SERVICE_NAME: ${process.env.RAILWAY_SERVICE_NAME || 'unknown'}`);
+        
+        // Test immediate health check
+        setTimeout(async () => {
+          try {
+            logger.info('🏥 Testing immediate health check after startup...');
+            const http = require('http');
+            const options = {
+              hostname: 'localhost',
+              port: port,
+              path: '/health',
+              method: 'GET',
+              timeout: 5000
+            };
+            
+            const req = http.request(options, (res) => {
+              logger.info(`✅ Self health check successful: ${res.statusCode}`);
+            });
+            
+            req.on('error', (err) => {
+              logger.error(`❌ Self health check failed: ${err.message}`);
+            });
+            
+            req.on('timeout', () => {
+              logger.error('❌ Self health check timeout');
+              req.destroy();
+            });
+            
+            req.end();
+          } catch (error) {
+            logger.error('❌ Error during self health check:', error);
+          }
+        }, 2000);
       });
 
       // Handle server errors
@@ -233,6 +271,9 @@ class ProjectTrackerBot {
 
       // Set up keep-alive for Railway
       this.setupKeepAlive();
+
+      // Set up process monitoring
+      this.setupProcessMonitoring();
 
       logger.info('✅ Application startup completed successfully');
 
@@ -251,6 +292,30 @@ class ProjectTrackerBot {
       }, 25 * 60 * 1000); // Every 25 minutes
       logger.info('✅ Keep-alive interval started');
     }
+  }
+
+  setupProcessMonitoring() {
+    // Monitor for unexpected process termination
+    process.on('exit', (code) => {
+      logger.error(`💀 Process exiting with code: ${code}`);
+    });
+
+    process.on('disconnect', () => {
+      logger.error('💀 Process disconnected from parent');
+    });
+
+    // Log memory usage periodically
+    if (process.env.NODE_ENV === 'production') {
+      setInterval(() => {
+        const memUsage = process.memoryUsage();
+        const memMB = Math.round(memUsage.heapUsed / 1024 / 1024);
+        if (memMB > 100) { // Only log if memory usage is significant
+          logger.info(`📊 Memory usage: ${memMB}MB heap, ${Math.round(memUsage.rss / 1024 / 1024)}MB RSS`);
+        }
+      }, 30000); // Every 30 seconds
+    }
+
+    logger.info('✅ Process monitoring started');
   }
 
   async cleanup() {
