@@ -171,6 +171,11 @@ class ProjectTrackerBot {
 
   async start() {
     try {
+      logger.info('🚀 Starting Project Tracker Bot application...');
+      logger.info(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
+      logger.info(`🐳 Platform: ${process.platform}`);
+      logger.info(`📦 Node.js: ${process.version}`);
+      
       // Test database connection first
       logger.info('🔌 Testing database connection...');
       await testConnection();
@@ -182,23 +187,27 @@ class ProjectTrackerBot {
 
       // Start Express server
       const port = process.env.PORT || 3000;
-      this.server = this.app.listen(port, () => {
+      this.server = this.app.listen(port, '0.0.0.0', () => {
         logger.info(`🚀 Project Tracker Bot started successfully`);
-        logger.info(`📡 Express server running on port ${port}`);
+        logger.info(`📡 Express server running on 0.0.0.0:${port}`);
         logger.info(`🤖 Slack bot is active and listening for commands`);
         logger.info(`📊 Weekly digest scheduled for Mondays at 9:00 AM`);
+        logger.info(`🏥 Health check available at /health`);
+        logger.info(`📊 Status endpoint available at /status`);
       });
 
       // Handle server errors
       this.server.on('error', (error) => {
-        logger.error('Server error:', error);
+        logger.error('❌ Server error:', error);
       });
 
       // Set up keep-alive for Railway
       this.setupKeepAlive();
 
+      logger.info('✅ Application startup completed successfully');
+
     } catch (error) {
-      logger.error('Failed to start application:', error);
+      logger.error('💥 Failed to start application:', error);
       await this.cleanup();
       process.exit(1);
     }
@@ -264,24 +273,33 @@ class ProjectTrackerBot {
 // Create and start the application
 const bot = new ProjectTrackerBot();
 
-// Graceful shutdown handling
+// Graceful shutdown handling for Railway containers
 let isShuttingDown = false;
+let shutdownTimeout;
 
 async function gracefulShutdown(signal) {
   if (isShuttingDown) {
-    logger.warn(`${signal} received again, forcing exit`);
+    logger.warn(`${signal} received again, forcing immediate exit`);
     process.exit(1);
   }
   
   isShuttingDown = true;
-  logger.info(`${signal} received, starting graceful shutdown`);
+  logger.info(`🛑 ${signal} received from Railway, starting graceful shutdown`);
+  
+  // Set a timeout to force exit if graceful shutdown takes too long
+  shutdownTimeout = setTimeout(() => {
+    logger.error('⏰ Graceful shutdown timeout, forcing exit');
+    process.exit(1);
+  }, 25000); // 25 seconds timeout for Railway
   
   try {
     await bot.stop();
-    logger.info('Graceful shutdown completed');
+    clearTimeout(shutdownTimeout);
+    logger.info('✅ Graceful shutdown completed successfully');
     process.exit(0);
   } catch (error) {
-    logger.error('Error during graceful shutdown:', error);
+    clearTimeout(shutdownTimeout);
+    logger.error('❌ Error during graceful shutdown:', error);
     process.exit(1);
   }
 }

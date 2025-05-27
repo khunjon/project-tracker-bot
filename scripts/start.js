@@ -50,6 +50,17 @@ process.on('unhandledRejection', (reason, promise) => {
   process.exit(1);
 });
 
+// Handle Railway container signals
+process.on('SIGTERM', () => {
+  logger.info('🛑 SIGTERM received in startup script - forwarding to main app');
+  // The main app will handle the graceful shutdown
+});
+
+process.on('SIGINT', () => {
+  logger.info('🛑 SIGINT received in startup script - forwarding to main app');
+  // The main app will handle the graceful shutdown
+});
+
 // Start the application
 async function start() {
   try {
