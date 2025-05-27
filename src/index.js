@@ -217,9 +217,23 @@ class ProjectTrackerBot {
 
       // Start Express server
       const port = process.env.PORT || 3000;
+      
+      // Log network interface information
+      const os = require('os');
+      const networkInterfaces = os.networkInterfaces();
+      logger.info('🌐 Available network interfaces:');
+      Object.keys(networkInterfaces).forEach(name => {
+        networkInterfaces[name].forEach(iface => {
+          if (!iface.internal) {
+            logger.info(`   - ${name}: ${iface.address} (${iface.family})`);
+          }
+        });
+      });
+      
       this.server = this.app.listen(port, '0.0.0.0', () => {
+        const address = this.server.address();
         logger.info(`🚀 Project Tracker Bot started successfully`);
-        logger.info(`📡 Express server running on 0.0.0.0:${port}`);
+        logger.info(`📡 Express server running on ${address.address}:${address.port} (family: ${address.family})`);
         logger.info(`🤖 Slack bot is active and listening for commands`);
         logger.info(`📊 Weekly digest scheduled for Mondays at 9:00 AM`);
         logger.info(`🏥 Health check available at /health`);
@@ -233,11 +247,13 @@ class ProjectTrackerBot {
         
         // Test immediate health check
         setTimeout(async () => {
+          const http = require('http');
+          
+          // Test IPv4 connectivity
           try {
-            logger.info('🏥 Testing immediate health check after startup...');
-            const http = require('http');
+            logger.info('🏥 Testing IPv4 health check after startup...');
             const options = {
-              hostname: 'localhost',
+              hostname: '127.0.0.1',
               port: port,
               path: '/health',
               method: 'GET',
@@ -245,21 +261,50 @@ class ProjectTrackerBot {
             };
             
             const req = http.request(options, (res) => {
-              logger.info(`✅ Self health check successful: ${res.statusCode}`);
+              logger.info(`✅ IPv4 health check successful: ${res.statusCode}`);
             });
             
             req.on('error', (err) => {
-              logger.error(`❌ Self health check failed: ${err.message}`);
+              logger.error(`❌ IPv4 health check failed: ${err.message}`);
             });
             
             req.on('timeout', () => {
-              logger.error('❌ Self health check timeout');
+              logger.error('❌ IPv4 health check timeout');
               req.destroy();
             });
             
             req.end();
           } catch (error) {
-            logger.error('❌ Error during self health check:', error);
+            logger.error('❌ Error during IPv4 health check:', error);
+          }
+
+          // Test IPv6 connectivity
+          try {
+            logger.info('🏥 Testing IPv6 health check after startup...');
+            const options = {
+              hostname: '::1',
+              port: port,
+              path: '/health',
+              method: 'GET',
+              timeout: 5000
+            };
+            
+            const req = http.request(options, (res) => {
+              logger.info(`✅ IPv6 health check successful: ${res.statusCode}`);
+            });
+            
+            req.on('error', (err) => {
+              logger.error(`❌ IPv6 health check failed: ${err.message}`);
+            });
+            
+            req.on('timeout', () => {
+              logger.error('❌ IPv6 health check timeout');
+              req.destroy();
+            });
+            
+            req.end();
+          } catch (error) {
+            logger.error('❌ Error during IPv6 health check:', error);
           }
         }, 2000);
       });
