@@ -1,0 +1,8 @@
+[build]
+builder = "nixpacks"
+
+[build.nixpacksConfig]
+cmds = ["npm run db:generate"]
+
+[deploy]
+startCommand = "npm start" 
