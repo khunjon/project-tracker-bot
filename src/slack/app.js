@@ -225,7 +225,252 @@ Just use any of the commands above to get started!`;
       }
     });
 
+    // Handle Home tab opened
+    this.app.event('app_home_opened', async ({ event, client }) => {
+      try {
+        // Only update the home tab if the user is viewing the Home tab (not Messages tab)
+        if (event.tab === 'home') {
+          await this.updateHomeTab(client, event.user);
+        }
+      } catch (error) {
+        logger.error('Error handling app_home_opened:', error);
+      }
+    });
+
     logger.info('Slack event handlers registered');
+  }
+
+  // Method to update the Home tab view
+  async updateHomeTab(client, userId) {
+    try {
+      // Get project statistics
+      const projectService = require('../services/projectService');
+      const stats = await projectService.getProjectStats();
+      
+      // Get recent projects (last 5)
+      const recentProjects = await projectService.getAllProjects();
+      const sortedProjects = recentProjects
+        .sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt))
+        .slice(0, 5);
+
+      // Get recent updates (last 3)
+      const recentUpdates = await projectService.getRecentUpdates(7, 3);
+
+      // Build the Home tab blocks
+      const blocks = [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `👋 *Welcome to Project Tracker!*\n\nYour personal project management dashboard.`
+          }
+        },
+        {
+          type: "divider"
+        },
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `📊 *Portfolio Overview*`
+          }
+        },
+        {
+          type: "section",
+          fields: [
+            {
+              type: "mrkdwn",
+              text: `*Total Projects:*\n${stats.total}`
+            },
+            {
+              type: "mrkdwn",
+              text: `*Active Projects:*\n${stats.active}`
+            },
+            {
+              type: "mrkdwn",
+              text: `*In Progress:*\n${stats.byStatus.inProgress}`
+            },
+            {
+              type: "mrkdwn",
+              text: `*Completed:*\n${stats.byStatus.completed}`
+            }
+          ]
+        },
+        {
+          type: "actions",
+          elements: [
+            {
+              type: "button",
+              text: {
+                type: "plain_text",
+                text: "📋 View All Projects",
+                emoji: true
+              },
+              action_id: "home_view_projects",
+              style: "primary"
+            },
+            {
+              type: "button",
+              text: {
+                type: "plain_text",
+                text: "➕ Create Project",
+                emoji: true
+              },
+              action_id: "home_create_project"
+            },
+            {
+              type: "button",
+              text: {
+                type: "plain_text",
+                text: "📝 Update Project",
+                emoji: true
+              },
+              action_id: "home_update_project"
+            }
+          ]
+        }
+      ];
+
+      // Add recent projects section if there are any
+      if (sortedProjects.length > 0) {
+        blocks.push(
+          {
+            type: "divider"
+          },
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: `🕒 *Recent Projects*`
+            }
+          }
+        );
+
+        sortedProjects.forEach(project => {
+          const statusEmoji = {
+            'PLANNING': '📝',
+            'IN_PROGRESS': '🚀',
+            'ON_HOLD': '⏸️',
+            'COMPLETED': '✅',
+            'CANCELLED': '❌'
+          }[project.status] || '📋';
+
+          const lastUpdate = new Date(project.updatedAt).toLocaleDateString();
+          
+          blocks.push({
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: `${statusEmoji} *${project.name}*\n${project.clientName} • Updated ${lastUpdate}`
+            },
+            accessory: {
+              type: "button",
+              text: {
+                type: "plain_text",
+                text: "View Details"
+              },
+              action_id: "view_project_details",
+              value: project.id
+            }
+          });
+        });
+      }
+
+      // Add recent activity section if there are updates
+      if (recentUpdates.length > 0) {
+        blocks.push(
+          {
+            type: "divider"
+          },
+          {
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: `📈 *Recent Activity*`
+            }
+          }
+        );
+
+        recentUpdates.forEach(update => {
+          const updateDate = new Date(update.createdAt).toLocaleDateString();
+          blocks.push({
+            type: "section",
+            text: {
+              type: "mrkdwn",
+              text: `*${update.project.name}*\n${update.user.name} • ${updateDate}\n${update.content.substring(0, 150)}${update.content.length > 150 ? '...' : ''}`
+            }
+          });
+        });
+      }
+
+      // Add help section
+      blocks.push(
+        {
+          type: "divider"
+        },
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: `💡 *Quick Commands*\n• \`/project-new\` - Create a new project\n• \`/project-update\` - Add project updates\n• \`/project-list\` - View all projects\n\nYou can also message me directly for help!`
+          }
+        }
+      );
+
+      // Publish the view to the Home tab
+      await client.views.publish({
+        user_id: userId,
+        view: {
+          type: 'home',
+          blocks: blocks
+        }
+      });
+
+      logger.info('Home tab updated successfully', { userId });
+    } catch (error) {
+      logger.error('Error updating home tab:', error);
+      
+      // Fallback to a simple home tab if there's an error
+      await client.views.publish({
+        user_id: userId,
+        view: {
+          type: 'home',
+          blocks: [
+            {
+              type: "section",
+              text: {
+                type: "mrkdwn",
+                text: `👋 *Welcome to Project Tracker!*\n\nSorry, there was an error loading your dashboard. Please try refreshing or use the slash commands:\n\n• \`/project-new\` - Create a new project\n• \`/project-update\` - Add project updates\n• \`/project-list\` - View all projects`
+              }
+            },
+            {
+              type: "actions",
+              elements: [
+                {
+                  type: "button",
+                  text: {
+                    type: "plain_text",
+                    text: "📋 View Projects",
+                    emoji: true
+                  },
+                  action_id: "home_view_projects",
+                  style: "primary"
+                },
+                {
+                  type: "button",
+                  text: {
+                    type: "plain_text",
+                    text: "➕ Create Project",
+                    emoji: true
+                  },
+                  action_id: "home_create_project"
+                }
+              ]
+            }
+          ]
+        }
+      });
+    }
   }
 
   setupInteractions() {
@@ -319,6 +564,60 @@ Just use any of the commands above to get started!`;
         await say("To update a project, please use the `/project-update` command. This will show you a list of projects to choose from and let you add updates.");
       } catch (error) {
         logger.error('Error handling DM update project button:', error);
+      }
+    });
+
+    // Handle Home tab button interactions
+    this.app.action('home_view_projects', async ({ ack, body, client }) => {
+      await ack();
+      
+      try {
+        // Trigger project list command from Home tab
+        await projectListCommand.command({
+          command: { channel_id: body.user.id, user_id: body.user.id }, // Use user ID as channel for DM
+          ack: async () => {},
+          respond: async (response) => {
+            // Send as DM to the user
+            await client.chat.postMessage({
+              channel: body.user.id,
+              ...response
+            });
+          },
+          client,
+          body: { user_id: body.user.id }
+        });
+      } catch (error) {
+        logger.error('Error handling home view projects button:', error);
+        await client.chat.postMessage({
+          channel: body.user.id,
+          text: "Sorry, there was an error retrieving the project list. Please try the `/project-list` command."
+        });
+      }
+    });
+
+    this.app.action('home_create_project', async ({ ack, body, client }) => {
+      await ack();
+      
+      try {
+        await client.chat.postMessage({
+          channel: body.user.id,
+          text: "To create a new project, please use the `/project-new` command. This will open an interactive form where you can enter all the project details."
+        });
+      } catch (error) {
+        logger.error('Error handling home create project button:', error);
+      }
+    });
+
+    this.app.action('home_update_project', async ({ ack, body, client }) => {
+      await ack();
+      
+      try {
+        await client.chat.postMessage({
+          channel: body.user.id,
+          text: "To update a project, please use the `/project-update` command. This will show you a list of projects to choose from and let you add updates."
+        });
+      } catch (error) {
+        logger.error('Error handling home update project button:', error);
       }
     });
 
