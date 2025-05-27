@@ -46,77 +46,9 @@ class ProjectTrackerBot {
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: true }));
 
-    // Health check endpoint (simple, no database check to avoid connection issues)
+    // Health check endpoint
     this.app.get('/health', (req, res) => {
-      try {
-        // Log health checks from Railway (but not too frequently)
-        const userAgent = req.headers['user-agent'] || '';
-        const isRailwayCheck = userAgent.includes('Railway') || userAgent.includes('health') || userAgent.includes('kube-probe');
-        
-        if (isRailwayCheck) {
-          logger.debug('🏥 Railway health check received', { userAgent, ip: req.ip });
-        }
-        
-        // Railway expects a simple 200 response - keep it minimal
-        res.status(200).send('OK');
-      } catch (error) {
-        logger.error('Health check error:', error);
-        res.status(503).send('UNHEALTHY');
-      }
-    });
-
-    // Detailed health status endpoint (separate from Railway health check)
-    this.app.get('/health/status', (req, res) => {
-      try {
-        const status = {
-          status: 'healthy',
-          timestamp: new Date().toISOString(),
-          uptime: Math.floor(process.uptime()),
-          environment: process.env.NODE_ENV || 'development',
-          slack: this.slackApp ? { connected: true } : { connected: false },
-          railway: {
-            deployment: process.env.RAILWAY_DEPLOYMENT_ID || 'unknown',
-            service: process.env.RAILWAY_SERVICE_NAME || 'unknown'
-          }
-        };
-        
-        res.json(status);
-      } catch (error) {
-        logger.error('Health status error:', error);
-        res.status(503).json({
-          status: 'unhealthy',
-          error: error.message,
-          timestamp: new Date().toISOString()
-        });
-      }
-    });
-
-    // Database health check endpoint (separate from main health check)
-    this.app.get('/health/database', async (req, res) => {
-      try {
-        // Test database connection with timeout
-        const { prisma } = require('./config/database');
-        const queryPromise = prisma.$queryRaw`SELECT 1 as health_check`;
-        const timeoutPromise = new Promise((_, reject) => {
-          setTimeout(() => reject(new Error('Database health check timeout')), 5000);
-        });
-        
-        await Promise.race([queryPromise, timeoutPromise]);
-        
-        res.json({
-          status: 'healthy',
-          database: 'connected',
-          timestamp: new Date().toISOString()
-        });
-      } catch (error) {
-        logger.error('Database health check failed:', error);
-        res.status(503).json({
-          status: 'unhealthy',
-          database: 'disconnected',
-          error: error.message,
-          timestamp: new Date().toISOString()
-        });
-      }
+      res.status(200).send('OK');
     });
 
     // Status endpoint with detailed monitoring
@@ -174,19 +106,7 @@ class ProjectTrackerBot {
       }
     });
 
-    // Manual shutdown trigger endpoint (for testing)
-    this.app.post('/shutdown', (req, res) => {
-      logger.info('🛑 Manual shutdown requested via API');
-      res.json({ 
-        success: true, 
-        message: 'Shutdown initiated' 
-      });
-      
-      // Trigger shutdown after response is sent
-      setTimeout(() => {
-        process.kill(process.pid, 'SIGTERM');
-      }, 100);
-    });
+
 
     // Root endpoint
     this.app.get('/', (req, res) => {
@@ -227,75 +147,35 @@ class ProjectTrackerBot {
 
   async start() {
     try {
-      logger.info('🚀 Starting Project Tracker Bot application...');
+      logger.info('🚀 Starting Project Tracker Bot...');
       logger.info(`📍 Environment: ${process.env.NODE_ENV || 'development'}`);
-      logger.info(`🐳 Platform: ${process.platform}`);
-      logger.info(`📦 Node.js: ${process.version}`);
       
-      // Test database connection first
-      logger.info('🔌 Testing database connection...');
+      // Test database connection
       await testConnection();
 
       // Initialize Slack app
-      logger.info('🤖 Initializing Slack app...');
       this.slackApp = new SlackApp();
       await this.slackApp.start();
 
       // Start Express server
       const port = process.env.PORT || 3000;
       
-      // Log network interface information
-      const os = require('os');
-      const networkInterfaces = os.networkInterfaces();
-      logger.info('🌐 Available network interfaces:');
-      Object.keys(networkInterfaces).forEach(name => {
-        networkInterfaces[name].forEach(iface => {
-          if (!iface.internal) {
-            logger.info(`   - ${name}: ${iface.address} (${iface.family})`);
-          }
-        });
-      });
-      
-      // Use IPv4 binding for Railway compatibility
-      // Railway health checks seem to prefer IPv4
-      const bindAddress = '0.0.0.0'; // Always use IPv4 for Railway
-      logger.info(`🔗 Binding to address: ${bindAddress} (IPv4 for Railway compatibility)`);
-      
-      this.server = this.app.listen(port, bindAddress, async () => {
+      this.server = this.app.listen(port, '0.0.0.0', () => {
         const address = this.server.address();
-        logger.info(`🚀 Project Tracker Bot started successfully`);
-        logger.info(`📡 Express server running on ${address.address}:${address.port} (family: ${address.family})`);
+        logger.info(`✅ Project Tracker Bot started successfully`);
+        logger.info(`📡 Server running on ${address.address}:${address.port}`);
         logger.info(`🤖 Slack bot is active and listening for commands`);
         logger.info(`📊 Weekly digest scheduled for Mondays at 9:00 AM`);
-        logger.info(`🏥 Health check available at /health`);
-        
-        // Railway deployment detected - no health check needed
-        if (process.env.RAILWAY_DEPLOYMENT_ID) {
-          logger.info('🚂 Railway deployment detected - health check disabled');
-        }
-        logger.info(`📊 Status endpoint available at /status`);
-        
-        // Log Railway-specific information
-        logger.info(`🚂 Railway deployment info:`);
-        logger.info(`   - PORT: ${port}`);
-        logger.info(`   - RAILWAY_DEPLOYMENT_ID: ${process.env.RAILWAY_DEPLOYMENT_ID || 'unknown'}`);
-        logger.info(`   - RAILWAY_SERVICE_NAME: ${process.env.RAILWAY_SERVICE_NAME || 'unknown'}`);
-        
-
       });
 
       // Handle server errors
       this.server.on('error', (error) => {
-        logger.error('❌ Server error:', error);
+        logger.error('Server error:', error);
       });
 
-      // Set up keep-alive for Railway
+      // Set up keep-alive and monitoring
       this.setupKeepAlive();
-
-      // Set up process monitoring
       this.setupProcessMonitoring();
-
-      logger.info('✅ Application startup completed successfully');
 
     } catch (error) {
       logger.error('💥 Failed to start application:', error);
@@ -305,80 +185,60 @@ class ProjectTrackerBot {
   }
 
   setupKeepAlive() {
-    // Send periodic health checks to prevent Railway from sleeping
+    // Keep-alive for Railway (prevents sleeping)
     if (process.env.NODE_ENV === 'production') {
       this.keepAliveInterval = setInterval(() => {
-        logger.debug('Keep-alive ping');
+        // Silent keep-alive ping
       }, 25 * 60 * 1000); // Every 25 minutes
-      logger.info('✅ Keep-alive interval started');
     }
   }
 
   setupProcessMonitoring() {
-    // Monitor for unexpected process termination
+    // Basic process monitoring
     process.on('exit', (code) => {
-      logger.error(`💀 Process exiting with code: ${code}`);
+      logger.info(`Process exiting with code: ${code}`);
     });
 
     process.on('disconnect', () => {
-      logger.error('💀 Process disconnected from parent');
+      logger.warn('Process disconnected from parent');
     });
-
-    // Log memory usage periodically
-    if (process.env.NODE_ENV === 'production') {
-      setInterval(() => {
-        const memUsage = process.memoryUsage();
-        const memMB = Math.round(memUsage.heapUsed / 1024 / 1024);
-        if (memMB > 100) { // Only log if memory usage is significant
-          logger.info(`📊 Memory usage: ${memMB}MB heap, ${Math.round(memUsage.rss / 1024 / 1024)}MB RSS`);
-        }
-      }, 30000); // Every 30 seconds
-    }
-
-    logger.info('✅ Process monitoring started');
   }
 
   async cleanup() {
-    logger.info('🧹 Cleaning up resources...');
+    logger.info('Cleaning up resources...');
     
     try {
-      // Clear any intervals
+      // Clear intervals
       if (this.keepAliveInterval) {
         clearInterval(this.keepAliveInterval);
-        logger.info('✅ Cleared keep-alive interval');
       }
 
       // Disconnect from database with timeout
-      logger.info('🔌 Starting database cleanup...');
       const cleanupPromise = disconnect();
       const timeoutPromise = new Promise((resolve) => {
         setTimeout(() => {
-          logger.warn('⏰ Database cleanup timeout, continuing shutdown');
+          logger.warn('Database cleanup timeout, continuing shutdown');
           resolve();
-        }, 8000); // 8 second timeout for cleanup
+        }, 8000);
       });
       
       await Promise.race([cleanupPromise, timeoutPromise]);
-      logger.info('✅ Database cleanup completed');
     } catch (error) {
-      logger.error('❌ Error during cleanup:', error);
-      // Continue with shutdown even if cleanup fails
+      logger.error('Error during cleanup:', error);
     }
   }
 
   async stop() {
-    logger.info('🛑 Shutting down Project Tracker Bot...');
+    logger.info('Shutting down Project Tracker Bot...');
 
     try {
-      // Stop Slack app first (this stops cron jobs)
+      // Stop Slack app first (stops cron jobs)
       if (this.slackApp) {
-        logger.info('🤖 Stopping Slack app...');
         await this.slackApp.stop();
       }
 
       // Stop Express server
       if (this.server) {
-        logger.info('📡 Stopping Express server...');
         await new Promise((resolve, reject) => {
           this.server.close((error) => {
             if (error) reject(error);
@@ -387,16 +247,15 @@ class ProjectTrackerBot {
         });
       }
 
-      // Wait a moment for any pending operations to complete
-      logger.info('⏳ Waiting for pending operations to complete...');
+      // Wait for pending operations
       await new Promise(resolve => setTimeout(resolve, 2000));
 
-      // Clean up resources (including database connections)
+      // Clean up resources
       await this.cleanup();
 
-      logger.info('✅ Project Tracker Bot shut down successfully');
+      logger.info('Project Tracker Bot shut down successfully');
     } catch (error) {
-      logger.error('❌ Error during shutdown:', error);
+      logger.error('Error during shutdown:', error);
       throw error;
     }
   }
@@ -416,27 +275,22 @@ async function gracefulShutdown(signal) {
   }
   
   isShuttingDown = true;
-  logger.info(`🛑 ${signal} received from Railway, starting graceful shutdown`);
-  logger.info(`📊 Process stats at shutdown: PID=${process.pid}, uptime=${Math.floor(process.uptime())}s`);
+  logger.info(`${signal} received, starting graceful shutdown`);
   
-  // Set a timeout to force exit if graceful shutdown takes too long
+  // Set timeout to force exit if shutdown takes too long
   shutdownTimeout = setTimeout(() => {
-    logger.error('⏰ Graceful shutdown timeout (25s), forcing exit');
-    logger.error('💀 This may indicate hanging connections or processes');
+    logger.error('Graceful shutdown timeout, forcing exit');
     process.exit(1);
-  }, 25000); // 25 seconds timeout for Railway
+  }, 25000);
   
   try {
-    const shutdownStart = Date.now();
     await bot.stop();
-    const shutdownDuration = Date.now() - shutdownStart;
-    
     clearTimeout(shutdownTimeout);
-    logger.info(`✅ Graceful shutdown completed successfully in ${shutdownDuration}ms`);
+    logger.info('Graceful shutdown completed successfully');
     process.exit(0);
   } catch (error) {
     clearTimeout(shutdownTimeout);
-    logger.error('❌ Error during graceful shutdown:', error);
+    logger.error('Error during graceful shutdown:', error);
     process.exit(1);
   }
 }
