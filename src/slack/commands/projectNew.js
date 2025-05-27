@@ -397,6 +397,7 @@ const handleProjectNewSubmission = async ({ ack, body, view, client, slackServic
 
     await client.chat.postMessage({
       channel: body.user.id, // Send as DM
+      text: `✅ Project "${project.name}" created successfully!`,
       blocks: confirmationBlocks
     });
 
