@@ -1,4 +1,5 @@
 const projectService = require('../../services/projectService');
+const openaiService = require('../../services/openai');
 const logger = require('../../config/logger');
 
 const projectListCommand = async ({ command, ack, respond, client, body }) => {
@@ -19,13 +20,26 @@ const projectListCommand = async ({ command, ack, respond, client, body }) => {
     // Get project statistics
     const stats = await projectService.getProjectStats();
 
-    // Create the header block
+    // Get recent updates for AI summary
+    const recentUpdates = await projectService.getRecentUpdates(7, 10);
+
+    // Generate AI summary
+    const aiSummary = await openaiService.generateProjectListSummary(projects, recentUpdates);
+
+    // Create the header block with AI summary
     const blocks = [
       {
         type: "section",
         text: {
           type: "mrkdwn",
           text: `📋 *Project Portfolio Overview*\n\n*Total Projects:* ${stats.total} | *Active:* ${stats.active} | *Completed:* ${stats.byStatus.completed}`
+        }
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `🤖 *AI Portfolio Summary:*\n_${aiSummary}_`
         }
       },
       {
@@ -199,6 +213,9 @@ const handleViewProjectDetails = async ({ ack, body, client }) => {
       return;
     }
 
+    // Generate AI summary for this specific project
+    const aiSummary = await openaiService.generateProjectDetailSummary(project);
+
     // Format project details
     const assigneeText = project.assignee ? project.assignee.name : 'Unassigned';
     const deadlineText = project.deadline 
@@ -215,6 +232,16 @@ const handleViewProjectDetails = async ({ ack, body, client }) => {
           type: "mrkdwn",
           text: `📋 *${project.name}*\n*Client:* ${project.clientName}`
         }
+      },
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text: `🤖 *AI Project Summary:*\n_${aiSummary}_`
+        }
+      },
+      {
+        type: "divider"
       },
       {
         type: "section",
