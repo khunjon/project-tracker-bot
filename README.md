@@ -2,6 +2,8 @@
 
 A comprehensive Slack bot for project management with PostgreSQL database integration, OpenAI-powered analysis, and automated weekly reporting.
 
+> ✅ **Ready for Production**: This bot is configured for Railway deployment with automatic builds and database integration.
+
 ## Features
 
 ### 🤖 Slack Bot Commands
@@ -69,6 +71,7 @@ npm run db:generate
 # Connect your GitHub repo to Railway and deploy
 git push  # Auto-deploys to Railway
 
+# Your bot should now be live at: https://your-app.railway.app
 # Or for local testing (optional):
 npm run dev
 ```
@@ -108,18 +111,20 @@ GENERAL_CHANNEL_ID=C1234567890
    - `/project-new` → `https://your-app.railway.app/slack/events`
    - `/project-update` → `https://your-app.railway.app/slack/events`
    - `/project-list` → `https://your-app.railway.app/slack/events`
+   
+   **Note**: Replace `your-app.railway.app` with your actual Railway deployment URL
 5. **Install App to Workspace**
 
 ## Development Workflow
 
-### Railway-Only Development (Recommended)
+### Railway-Only Development (Recommended) ✅
 ```bash
 # Make changes to your code
 git add .
 git commit -m "Add new feature"
 git push                       # Auto-deploys to Railway
 
-# Test immediately in Slack
+# Test immediately in Slack (your bot is live!)
 /project-new "Test Project"
 ```
 
@@ -147,7 +152,7 @@ npm run dev          # Start local server (connects to Railway database)
 
 ## Deployment
 
-### Railway (Recommended)
+### Railway (Recommended) ✅
 
 1. **Connect GitHub repo to Railway**
 2. **Add PostgreSQL service**
@@ -162,6 +167,7 @@ npm run dev          # Start local server (connects to Railway database)
    # DATABASE_URL is provided automatically by Railway PostgreSQL
    ```
 4. **Deploy automatically on git push**
+5. **Update Slack app URLs** to point to your Railway deployment URL
 
 ### Docker (Optional - for local development)
 ```bash
@@ -219,14 +225,16 @@ docker-compose up --build
 ### Common Issues
 1. **Bot not responding**: Check Slack tokens and Socket Mode
 2. **Database errors**: Verify DATABASE_URL and run `npm run db:push`
-3. **Missing commands**: Ensure slash commands are configured in Slack app
+3. **Missing commands**: Ensure slash commands are configured in Slack app and point to your Railway URL
 4. **AI analysis failing**: Check OPENAI_API_KEY (optional feature)
+5. **Railway deployment issues**: Check Railway logs for build/deployment errors
 
 ### Getting Help
-1. Check logs in Railway dashboard or local console
-2. Verify environment variables are set correctly
+1. Check logs in Railway dashboard for deployment issues
+2. Verify environment variables are set correctly in Railway
 3. Test database connection with `npm run db:studio`
 4. Ensure Slack app permissions are correct
+5. Verify Slack slash command URLs point to your Railway deployment
 
 ## Contributing
 
