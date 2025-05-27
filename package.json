@@ -4,7 +4,8 @@
   "description": "Slack bot for project management with PostgreSQL and OpenAI integration",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
+    "start": "node scripts/start.js",
+    "start:direct": "node src/index.js",
     "build": "prisma generate",
     "dev": "nodemon src/index.js",
     "db:generate": "prisma generate",

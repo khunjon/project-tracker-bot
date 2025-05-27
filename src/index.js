@@ -5,6 +5,8 @@ const helmet = require('helmet');
 const cors = require('cors');
 const logger = require('./config/logger');
 const SlackApp = require('./slack/app');
+const { testConnection, disconnect } = require('./config/database');
+const { requestLogger, errorLogger, createHealthMonitor } = require('./middleware/monitoring');
 
 // Validate required environment variables
 const requiredEnvVars = [
@@ -26,6 +28,7 @@ class ProjectTrackerBot {
     this.app = express();
     this.slackApp = null;
     this.server = null;
+    this.healthMonitor = createHealthMonitor();
     
     this.setupExpress();
   }
@@ -35,35 +38,70 @@ class ProjectTrackerBot {
     this.app.use(helmet());
     this.app.use(cors());
     
+    // Monitoring middleware
+    this.app.use(requestLogger);
+    this.app.use(this.healthMonitor.middleware);
+    
     // Body parsing middleware
     this.app.use(express.json());
     this.app.use(express.urlencoded({ extended: true }));
 
     // Health check endpoint
-    this.app.get('/health', (req, res) => {
-      const status = {
-        status: 'healthy',
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
-        environment: process.env.NODE_ENV || 'development',
-        slack: this.slackApp ? this.slackApp.getStatus() : { isRunning: false }
-      };
-      
-      res.json(status);
+    this.app.get('/health', async (req, res) => {
+      try {
+        // Test database connection
+        const { prisma } = require('./config/database');
+        await prisma.$queryRaw`SELECT 1`;
+        
+        const status = {
+          status: 'healthy',
+          timestamp: new Date().toISOString(),
+          uptime: process.uptime(),
+          environment: process.env.NODE_ENV || 'development',
+          database: 'connected',
+          slack: this.slackApp ? this.slackApp.getStatus() : { isRunning: false }
+        };
+        
+        res.json(status);
+      } catch (error) {
+        logger.error('Health check failed:', error);
+        res.status(503).json({
+          status: 'unhealthy',
+          timestamp: new Date().toISOString(),
+          uptime: process.uptime(),
+          environment: process.env.NODE_ENV || 'development',
+          database: 'disconnected',
+          slack: this.slackApp ? this.slackApp.getStatus() : { isRunning: false },
+          error: error.message
+        });
+      }
     });
 
-    // Status endpoint
+    // Status endpoint with detailed monitoring
     this.app.get('/status', (req, res) => {
+      const stats = this.healthMonitor.getStats();
       const status = {
         service: 'project-tracker-bot',
         version: '1.0.0',
         status: 'running',
+        timestamp: new Date().toISOString(),
+        uptime: Math.floor(stats.uptime / 1000), // Convert to seconds
         slack: this.slackApp ? this.slackApp.getStatus() : { isRunning: false },
-        database: 'connected', // Could add actual DB health check
+        database: 'connected',
+        monitoring: {
+          requestCount: stats.requestCount,
+          errorCount: stats.errorCount,
+          errorRate: Math.round(stats.errorRate * 100) / 100,
+          memoryUsage: {
+            used: Math.round(stats.memoryUsage.heapUsed / 1024 / 1024),
+            total: Math.round(stats.memoryUsage.heapTotal / 1024 / 1024),
+            external: Math.round(stats.memoryUsage.external / 1024 / 1024)
+          }
+        },
         features: {
           slashCommands: ['/project-new', '/project-update', '/project-list'],
           weeklyDigest: true,
-          aiAnalysis: true
+          aiAnalysis: !!process.env.OPENAI_API_KEY
         }
       };
       
@@ -118,6 +156,7 @@ class ProjectTrackerBot {
     });
 
     // Error handling middleware
+    this.app.use(errorLogger);
     this.app.use((err, req, res, next) => {
       logger.error('Express error:', err);
       
@@ -132,7 +171,12 @@ class ProjectTrackerBot {
 
   async start() {
     try {
+      // Test database connection first
+      logger.info('🔌 Testing database connection...');
+      await testConnection();
+
       // Initialize Slack app
+      logger.info('🤖 Initializing Slack app...');
       this.slackApp = new SlackApp();
       await this.slackApp.start();
 
@@ -150,32 +194,69 @@ class ProjectTrackerBot {
         logger.error('Server error:', error);
       });
 
+      // Set up keep-alive for Railway
+      this.setupKeepAlive();
+
     } catch (error) {
       logger.error('Failed to start application:', error);
+      await this.cleanup();
       process.exit(1);
     }
   }
 
+  setupKeepAlive() {
+    // Send periodic health checks to prevent Railway from sleeping
+    if (process.env.NODE_ENV === 'production') {
+      setInterval(() => {
+        logger.debug('Keep-alive ping');
+      }, 25 * 60 * 1000); // Every 25 minutes
+    }
+  }
+
+  async cleanup() {
+    logger.info('🧹 Cleaning up resources...');
+    
+    try {
+      // Clear any intervals
+      if (this.keepAliveInterval) {
+        clearInterval(this.keepAliveInterval);
+      }
+
+      // Disconnect from database
+      await disconnect();
+    } catch (error) {
+      logger.error('Error during cleanup:', error);
+    }
+  }
+
   async stop() {
-    logger.info('Shutting down Project Tracker Bot...');
+    logger.info('🛑 Shutting down Project Tracker Bot...');
 
     try {
       // Stop Slack app
       if (this.slackApp) {
+        logger.info('🤖 Stopping Slack app...');
         await this.slackApp.stop();
       }
 
       // Stop Express server
       if (this.server) {
-        await new Promise((resolve) => {
-          this.server.close(resolve);
+        logger.info('📡 Stopping Express server...');
+        await new Promise((resolve, reject) => {
+          this.server.close((error) => {
+            if (error) reject(error);
+            else resolve();
+          });
         });
       }
 
-      logger.info('Project Tracker Bot shut down successfully');
+      // Clean up resources
+      await this.cleanup();
+
+      logger.info('✅ Project Tracker Bot shut down successfully');
     } catch (error) {
-      logger.error('Error during shutdown:', error);
-      process.exit(1);
+      logger.error('❌ Error during shutdown:', error);
+      throw error;
     }
   }
 }
@@ -184,26 +265,48 @@ class ProjectTrackerBot {
 const bot = new ProjectTrackerBot();
 
 // Graceful shutdown handling
-process.on('SIGTERM', async () => {
-  logger.info('SIGTERM received, starting graceful shutdown');
-  await bot.stop();
-  process.exit(0);
-});
+let isShuttingDown = false;
 
-process.on('SIGINT', async () => {
-  logger.info('SIGINT received, starting graceful shutdown');
-  await bot.stop();
-  process.exit(0);
-});
+async function gracefulShutdown(signal) {
+  if (isShuttingDown) {
+    logger.warn(`${signal} received again, forcing exit`);
+    process.exit(1);
+  }
+  
+  isShuttingDown = true;
+  logger.info(`${signal} received, starting graceful shutdown`);
+  
+  try {
+    await bot.stop();
+    logger.info('Graceful shutdown completed');
+    process.exit(0);
+  } catch (error) {
+    logger.error('Error during graceful shutdown:', error);
+    process.exit(1);
+  }
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
 
 // Handle uncaught exceptions
-process.on('uncaughtException', (error) => {
+process.on('uncaughtException', async (error) => {
   logger.error('Uncaught exception:', error);
+  try {
+    await bot.cleanup();
+  } catch (cleanupError) {
+    logger.error('Error during cleanup after uncaught exception:', cleanupError);
+  }
   process.exit(1);
 });
 
-process.on('unhandledRejection', (reason, promise) => {
+process.on('unhandledRejection', async (reason, promise) => {
   logger.error('Unhandled rejection at:', promise, 'reason:', reason);
+  try {
+    await bot.cleanup();
+  } catch (cleanupError) {
+    logger.error('Error during cleanup after unhandled rejection:', cleanupError);
+  }
   process.exit(1);
 });
 

@@ -1,4 +1,4 @@
-const prisma = require('../config/database');
+const { prisma } = require('../config/database');
 const logger = require('../config/logger');
 const openaiService = require('./openai');
 
