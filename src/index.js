@@ -48,21 +48,47 @@ class ProjectTrackerBot {
 
     // Health check endpoint (simple, no database check to avoid connection issues)
     this.app.get('/health', (req, res) => {
-      // Log health checks from Railway (but not too frequently)
-      const userAgent = req.headers['user-agent'] || '';
-      if (userAgent.includes('Railway') || userAgent.includes('health')) {
-        logger.debug('🏥 Railway health check received');
+      try {
+        // Log health checks from Railway (but not too frequently)
+        const userAgent = req.headers['user-agent'] || '';
+        const isRailwayCheck = userAgent.includes('Railway') || userAgent.includes('health') || userAgent.includes('kube-probe');
+        
+        if (isRailwayCheck) {
+          logger.debug('🏥 Railway health check received', { userAgent, ip: req.ip });
+        }
+        
+        // Railway expects a simple 200 response - keep it minimal
+        res.status(200).send('OK');
+      } catch (error) {
+        logger.error('Health check error:', error);
+        res.status(503).send('UNHEALTHY');
       }
-      
-      const status = {
-        status: 'healthy',
-        timestamp: new Date().toISOString(),
-        uptime: process.uptime(),
-        environment: process.env.NODE_ENV || 'development',
-        slack: this.slackApp ? this.slackApp.getStatus() : { isRunning: false }
-      };
-      
-      res.json(status);
+    });
+
+    // Detailed health status endpoint (separate from Railway health check)
+    this.app.get('/health/status', (req, res) => {
+      try {
+        const status = {
+          status: 'healthy',
+          timestamp: new Date().toISOString(),
+          uptime: Math.floor(process.uptime()),
+          environment: process.env.NODE_ENV || 'development',
+          slack: this.slackApp ? { connected: true } : { connected: false },
+          railway: {
+            deployment: process.env.RAILWAY_DEPLOYMENT_ID || 'unknown',
+            service: process.env.RAILWAY_SERVICE_NAME || 'unknown'
+          }
+        };
+        
+        res.json(status);
+      } catch (error) {
+        logger.error('Health status error:', error);
+        res.status(503).json({
+          status: 'unhealthy',
+          error: error.message,
+          timestamp: new Date().toISOString()
+        });
+      }
     });
 
     // Database health check endpoint (separate from main health check)
@@ -230,18 +256,25 @@ class ProjectTrackerBot {
         });
       });
       
-      // Use dual-stack binding for Railway compatibility
-      // This ensures both IPv4 and IPv6 connections work
-      const bindAddress = process.env.NODE_ENV === 'production' ? '::' : '0.0.0.0';
-      logger.info(`🔗 Binding to address: ${bindAddress} (dual-stack: ${bindAddress === '::'})`);
+      // Use IPv4 binding for Railway compatibility
+      // Railway health checks seem to prefer IPv4
+      const bindAddress = '0.0.0.0'; // Always use IPv4 for Railway
+      logger.info(`🔗 Binding to address: ${bindAddress} (IPv4 for Railway compatibility)`);
       
-      this.server = this.app.listen(port, bindAddress, () => {
+      this.server = this.app.listen(port, bindAddress, async () => {
         const address = this.server.address();
         logger.info(`🚀 Project Tracker Bot started successfully`);
         logger.info(`📡 Express server running on ${address.address}:${address.port} (family: ${address.family})`);
         logger.info(`🤖 Slack bot is active and listening for commands`);
         logger.info(`📊 Weekly digest scheduled for Mondays at 9:00 AM`);
         logger.info(`🏥 Health check available at /health`);
+        
+        // Give Railway a moment to detect the service is ready
+        if (process.env.RAILWAY_DEPLOYMENT_ID) {
+          logger.info('🚂 Railway deployment detected - allowing startup stabilization...');
+          await new Promise(resolve => setTimeout(resolve, 2000));
+          logger.info('✅ Startup stabilization complete');
+        }
         logger.info(`📊 Status endpoint available at /status`);
         
         // Log Railway-specific information

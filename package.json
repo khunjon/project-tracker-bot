@@ -8,6 +8,7 @@
     "start:direct": "node src/index.js",
     "build": "prisma generate",
     "dev": "nodemon src/index.js",
+    "test:health": "node scripts/test-health.js",
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:migrate": "prisma migrate dev",
