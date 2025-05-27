@@ -294,9 +294,8 @@ class WeeklyDigestService {
   stopScheduledDigest() {
     if (this.cronTask) {
       this.cronTask.stop();
-      this.cronTask.destroy();
       this.cronTask = null;
-      logger.info('✅ Weekly digest cron task stopped and destroyed');
+      logger.info('✅ Weekly digest cron task stopped');
     }
     this.isScheduled = false;
     logger.info('✅ Weekly digest scheduling stopped');
