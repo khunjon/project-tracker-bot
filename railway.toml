@@ -9,12 +9,6 @@ startCommand = "npm start"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
 
-[deploy.healthcheck]
-path = "/health"
-intervalSeconds = 60
-timeoutSeconds = 30
-initialDelaySeconds = 90
-
 [deploy.env]
 NODE_ENV = "production"
 PRISMA_CLI_BINARY_TARGETS = "debian-openssl-1.1.x"

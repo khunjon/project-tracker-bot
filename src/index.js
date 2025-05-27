@@ -269,11 +269,9 @@ class ProjectTrackerBot {
         logger.info(`📊 Weekly digest scheduled for Mondays at 9:00 AM`);
         logger.info(`🏥 Health check available at /health`);
         
-        // Give Railway a moment to detect the service is ready
+        // Railway deployment detected - no health check needed
         if (process.env.RAILWAY_DEPLOYMENT_ID) {
-          logger.info('🚂 Railway deployment detected - allowing startup stabilization...');
-          await new Promise(resolve => setTimeout(resolve, 2000));
-          logger.info('✅ Startup stabilization complete');
+          logger.info('🚂 Railway deployment detected - health check disabled');
         }
         logger.info(`📊 Status endpoint available at /status`);
         
@@ -283,105 +281,7 @@ class ProjectTrackerBot {
         logger.info(`   - RAILWAY_DEPLOYMENT_ID: ${process.env.RAILWAY_DEPLOYMENT_ID || 'unknown'}`);
         logger.info(`   - RAILWAY_SERVICE_NAME: ${process.env.RAILWAY_SERVICE_NAME || 'unknown'}`);
         
-        // Test immediate health check with proper dual-stack support
-        setTimeout(async () => {
-          const http = require('http');
-          
-          // Test connectivity based on binding address
-          if (bindAddress === '::') {
-            // Dual-stack binding - test both IPv4 and IPv6
-            logger.info('🏥 Testing dual-stack connectivity after startup...');
-            
-            // Test IPv6 (primary for dual-stack)
-            try {
-              logger.info('🏥 Testing IPv6 health check...');
-              const options = {
-                hostname: '::1',
-                port: port,
-                path: '/health',
-                method: 'GET',
-                timeout: 5000,
-                family: 6 // Force IPv6
-              };
-              
-              const req = http.request(options, (res) => {
-                logger.info(`✅ IPv6 health check successful: ${res.statusCode}`);
-              });
-              
-              req.on('error', (err) => {
-                logger.warn(`⚠️ IPv6 health check failed: ${err.message} (this may be normal in some environments)`);
-              });
-              
-              req.on('timeout', () => {
-                logger.warn('⚠️ IPv6 health check timeout');
-                req.destroy();
-              });
-              
-              req.end();
-            } catch (error) {
-              logger.warn('⚠️ Error during IPv6 health check:', error);
-            }
 
-            // Test IPv4 mapped through dual-stack
-            try {
-              logger.info('🏥 Testing IPv4-mapped health check...');
-              const options = {
-                hostname: '127.0.0.1',
-                port: port,
-                path: '/health',
-                method: 'GET',
-                timeout: 5000,
-                family: 4 // Force IPv4
-              };
-              
-              const req = http.request(options, (res) => {
-                logger.info(`✅ IPv4-mapped health check successful: ${res.statusCode}`);
-              });
-              
-              req.on('error', (err) => {
-                logger.error(`❌ IPv4-mapped health check failed: ${err.message}`);
-              });
-              
-              req.on('timeout', () => {
-                logger.error('❌ IPv4-mapped health check timeout');
-                req.destroy();
-              });
-              
-              req.end();
-            } catch (error) {
-              logger.error('❌ Error during IPv4-mapped health check:', error);
-            }
-          } else {
-            // IPv4-only binding
-            try {
-              logger.info('🏥 Testing IPv4 health check after startup...');
-              const options = {
-                hostname: '127.0.0.1',
-                port: port,
-                path: '/health',
-                method: 'GET',
-                timeout: 5000
-              };
-              
-              const req = http.request(options, (res) => {
-                logger.info(`✅ IPv4 health check successful: ${res.statusCode}`);
-              });
-              
-              req.on('error', (err) => {
-                logger.error(`❌ IPv4 health check failed: ${err.message}`);
-              });
-              
-              req.on('timeout', () => {
-                logger.error('❌ IPv4 health check timeout');
-                req.destroy();
-              });
-              
-              req.end();
-            } catch (error) {
-              logger.error('❌ Error during IPv4 health check:', error);
-            }
-          }
-        }, 3000);
       });
 
       // Handle server errors
