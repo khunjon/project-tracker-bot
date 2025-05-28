@@ -268,12 +268,17 @@ const projectUpdateCommand = async ({ command, ack, respond, client, body, slack
   }
 };
 
-// Handle client filter selection to update project dropdown
 const handleClientFilterSelection = async ({ ack, body, client }) => {
   await ack();
 
   try {
     const selectedClient = body.actions[0].selected_option.value;
+    
+    logger.info('Client filter selection triggered', { 
+      selectedClient,
+      userId: body.user.id,
+      viewId: body.view.id
+    });
     
     // Get projects based on client selection
     let projects;
@@ -288,6 +293,12 @@ const handleClientFilterSelection = async ({ ack, body, client }) => {
         clientName: selectedClient
       });
     }
+
+    logger.info('Projects retrieved for client filter', { 
+      selectedClient, 
+      projectCount: projects.length,
+      projectNames: projects.map(p => p.name)
+    });
 
     // Create project options
     const projectOptions = projects.map(project => ({
@@ -308,15 +319,17 @@ const handleClientFilterSelection = async ({ ack, body, client }) => {
       });
     }
 
-    // Update the modal with filtered projects
+    // Get the current view and create a completely new blocks array
     const currentView = body.view;
     const updatedBlocks = [...currentView.blocks];
     
-    // Update the project dropdown (block index 1)
+    // Completely rebuild the project dropdown element (block index 1)
     updatedBlocks[1] = {
-      ...updatedBlocks[1],
+      type: "input",
+      block_id: "project_select",
       element: {
-        ...updatedBlocks[1].element,
+        type: "static_select",
+        action_id: "project_dropdown",
         placeholder: {
           type: "plain_text",
           text: projectOptions.length > 0 && projectOptions[0].value !== "no_projects" 
@@ -324,21 +337,46 @@ const handleClientFilterSelection = async ({ ack, body, client }) => {
             : "No projects available"
         },
         options: projectOptions
+        // Explicitly don't set initial_option to ensure dropdown is cleared
+      },
+      label: {
+        type: "plain_text",
+        text: "Project"
       }
     };
 
-    await client.views.update({
-      view_id: body.view.id,
-      view: {
-        ...currentView,
-        blocks: updatedBlocks
-      }
+    logger.info('Updating modal view', { 
+      viewId: body.view.id,
+      newProjectOptionsCount: projectOptions.length,
+      blockIndex: 1
     });
 
-    logger.info('Project dropdown updated for client filter', { 
-      selectedClient, 
-      projectCount: projects.length 
+    // Create a new view object with updated blocks
+    const updatedView = {
+      type: currentView.type,
+      callback_id: currentView.callback_id,
+      title: currentView.title,
+      submit: currentView.submit,
+      close: currentView.close,
+      blocks: updatedBlocks
+    };
+
+    const updateResult = await client.views.update({
+      view_id: body.view.id,
+      view: updatedView
     });
+
+    if (updateResult.ok) {
+      logger.info('Project dropdown updated successfully for client filter', { 
+        selectedClient, 
+        projectCount: projects.length 
+      });
+    } else {
+      logger.error('Failed to update modal view', { 
+        error: updateResult.error,
+        selectedClient 
+      });
+    }
 
   } catch (error) {
     logger.error('Error updating project dropdown:', error);
