@@ -369,6 +369,14 @@ const projectUpdateCommand = async ({ command, ack, respond, client, body, slack
       ]
     };
 
+    // Log the modal structure for debugging
+    logger.info('Final modal structure', {
+      clientFilterActionId: finalModal.blocks[0].element.action_id,
+      projectDropdownActionId: finalModal.blocks[1].element.action_id,
+      clientOptionsCount: clientOptions.length,
+      projectOptionsCount: projectOptions.length
+    });
+
     // Update the modal with the final form
     await client.views.update({
       view_id: viewId,

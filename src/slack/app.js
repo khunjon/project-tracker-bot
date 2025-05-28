@@ -500,7 +500,7 @@ Just use any of the commands above to get started!`;
     this.app.view('project_new_modal', (args) => projectNewCommand.handleSubmission({ ...args, slackService: this.slackService }));
     this.app.view('project_update_modal', (args) => projectUpdateCommand.handleSubmission({ ...args, slackService: this.slackService }));
 
-    // Handle dropdown interactions with enhanced logging
+    // Handle dropdown interactions with enhanced logging - register this FIRST
     this.app.action('client_filter_dropdown', async (args) => {
       logger.info('Client filter dropdown action triggered', {
         userId: args.body.user.id,
@@ -522,25 +522,32 @@ Just use any of the commands above to get started!`;
       }
     });
 
-    // Add a catch-all action handler for debugging
-    this.app.action(/.*/, async (args) => {
-      const actionId = args.body.actions?.[0]?.action_id;
-      
-      // Only log if it's not one of our known actions
-      if (!['view_project_details', 'view_project_stats', 'create_new_project', 'create_new_project_digest', 
-            'view_all_projects_digest', 'dm_view_projects', 'dm_create_project', 'dm_update_project',
-            'home_view_projects', 'home_create_project', 'home_update_project'].includes(actionId)) {
-        
-        logger.info('Unhandled action triggered', {
-          actionId,
-          userId: args.body.user.id,
-          selectedValue: args.body.actions?.[0]?.selected_option?.value,
-          timestamp: new Date().toISOString(),
-          bodyType: args.body.type
-        });
-      }
-      
-      // Don't ack here - let specific handlers handle it
+    // Add test handler for project dropdown to see if ANY actions work
+    this.app.action('project_dropdown', async (args) => {
+      await args.ack();
+      logger.info('Project dropdown action triggered (test)', {
+        userId: args.body.user.id,
+        actionId: args.body.actions[0].action_id,
+        selectedValue: args.body.actions[0].selected_option?.value,
+        timestamp: new Date().toISOString()
+      });
+    });
+
+    // Add test handlers for other modal actions
+    this.app.action('assignee_select', async (args) => {
+      await args.ack();
+      logger.info('Assignee select action triggered (test)', {
+        userId: args.body.user.id,
+        selectedValue: args.body.actions[0].selected_option?.value
+      });
+    });
+
+    this.app.action('status_select', async (args) => {
+      await args.ack();
+      logger.info('Status select action triggered (test)', {
+        userId: args.body.user.id,
+        selectedValue: args.body.actions[0].selected_option?.value
+      });
     });
 
     // Handle button interactions
@@ -681,6 +688,31 @@ Just use any of the commands above to get started!`;
       } catch (error) {
         logger.error('Error handling home update project button:', error);
       }
+    });
+
+    // Add debugging for any unhandled actions (but don't interfere with handling)
+    this.app.action(/.*/, async (args) => {
+      const actionId = args.body.actions?.[0]?.action_id;
+      
+      // Only log unknown actions for debugging
+      const knownActions = [
+        'client_filter_dropdown', 'project_dropdown', 'assignee_select', 'status_select', 'content_input',
+        'view_project_details', 'view_project_stats', 'create_new_project', 'create_new_project_digest', 
+        'view_all_projects_digest', 'dm_view_projects', 'dm_create_project', 'dm_update_project',
+        'home_view_projects', 'home_create_project', 'home_update_project'
+      ];
+      
+      if (!knownActions.includes(actionId)) {
+        logger.info('Unknown action triggered', {
+          actionId,
+          userId: args.body.user.id,
+          selectedValue: args.body.actions?.[0]?.selected_option?.value,
+          timestamp: new Date().toISOString(),
+          bodyType: args.body.type
+        });
+      }
+      
+      // Always pass through to other handlers - don't ack here
     });
 
     // Handle errors in interactions
