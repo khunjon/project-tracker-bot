@@ -500,8 +500,26 @@ Just use any of the commands above to get started!`;
     this.app.view('project_new_modal', (args) => projectNewCommand.handleSubmission({ ...args, slackService: this.slackService }));
     this.app.view('project_update_modal', (args) => projectUpdateCommand.handleSubmission({ ...args, slackService: this.slackService }));
 
-    // Handle dropdown interactions
-    this.app.action('client_filter_dropdown', projectUpdateCommand.handleClientFilterSelection);
+    // Handle dropdown interactions with enhanced logging
+    this.app.action('client_filter_dropdown', async (args) => {
+      logger.info('Client filter dropdown action triggered', {
+        userId: args.body.user.id,
+        actionId: args.body.actions[0].action_id,
+        selectedValue: args.body.actions[0].selected_option?.value,
+        timestamp: new Date().toISOString()
+      });
+      
+      try {
+        await projectUpdateCommand.handleClientFilterSelection(args);
+      } catch (error) {
+        logger.error('Error in client filter dropdown handler:', {
+          error: error.message,
+          stack: error.stack,
+          userId: args.body.user.id
+        });
+        await args.ack();
+      }
+    });
 
     // Handle button interactions
     this.app.action('view_project_details', projectListCommand.handleViewProjectDetails);

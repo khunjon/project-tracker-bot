@@ -6,28 +6,61 @@ const projectUpdateCommand = async ({ command, ack, respond, client, body, slack
   await ack();
 
   try {
-    // Get all active projects for counting
-    const projects = await projectService.getAllProjects();
-    
-    if (projects.length === 0) {
-      await respond({
-        text: "📝 No projects found. Create a project first using `/project-new`.",
-        response_type: "ephemeral"
-      });
-      return;
-    }
-
-    // Get unique clients from database (clients that actually have projects)
-    const uniqueClients = await projectService.getUniqueClients();
-    
-    // Get workspace users for project lead dropdown
-    const workspaceUsers = await slackService.getWorkspaceUsers();
-    
-    logger.info('Data retrieved for project update', { 
-      clientCount: uniqueClients.length, 
-      clients: uniqueClients,
-      userCount: workspaceUsers.length
+    logger.info('Project update command initiated', { 
+      userId: command.user_id,
+      channelId: command.channel_id,
+      timestamp: new Date().toISOString()
     });
+
+    // Add retry logic for cold starts
+    let projects, uniqueClients, workspaceUsers;
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    while (retryCount < maxRetries) {
+      try {
+        // Get all active projects for counting
+        projects = await projectService.getAllProjects();
+        
+        if (projects.length === 0) {
+          await respond({
+            text: "📝 No projects found. Create a project first using `/project-new`.",
+            response_type: "ephemeral"
+          });
+          return;
+        }
+
+        // Get unique clients from database (clients that actually have projects)
+        uniqueClients = await projectService.getUniqueClients();
+        
+        // Get workspace users for project lead dropdown
+        workspaceUsers = await slackService.getWorkspaceUsers();
+        
+        logger.info('Data retrieved successfully for project update', { 
+          clientCount: uniqueClients.length, 
+          clients: uniqueClients,
+          userCount: workspaceUsers.length,
+          projectCount: projects.length,
+          retryCount
+        });
+        
+        break; // Success, exit retry loop
+        
+      } catch (error) {
+        retryCount++;
+        logger.warn(`Retry ${retryCount}/${maxRetries} for project update data retrieval`, { 
+          error: error.message,
+          userId: command.user_id 
+        });
+        
+        if (retryCount >= maxRetries) {
+          throw error; // Re-throw after max retries
+        }
+        
+        // Wait before retry (exponential backoff)
+        await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+      }
+    }
 
     // Create client options from database clients
     const clientOptions = uniqueClients.map(clientName => ({
@@ -256,13 +289,18 @@ const projectUpdateCommand = async ({ command, ack, respond, client, body, slack
       view: modal
     });
 
-    logger.info('Project update modal opened', { userId: body.user_id });
+    logger.info('Project update modal opened successfully', { 
+      userId: body.user_id,
+      modalId: modal.callback_id,
+      clientOptionsCount: clientOptions.length,
+      projectOptionsCount: projectOptions.length
+    });
 
   } catch (error) {
     logger.error('Error opening project update modal:', error);
     
     await respond({
-      text: "❌ Sorry, there was an error opening the project update form. Please try again.",
+      text: "❌ Sorry, there was an error opening the project update form. This might be due to a cold start - please try the command again in a moment.",
       response_type: "ephemeral"
     });
   }
@@ -277,7 +315,8 @@ const handleClientFilterSelection = async ({ ack, body, client }) => {
     logger.info('Client filter selection triggered', { 
       selectedClient,
       userId: body.user.id,
-      viewId: body.view.id
+      viewId: body.view.id,
+      actionId: body.actions[0].action_id
     });
     
     // Get projects based on client selection
@@ -300,7 +339,16 @@ const handleClientFilterSelection = async ({ ack, body, client }) => {
       projectNames: projects.map(p => p.name)
     });
 
-    // Create project options
+    // Get the current view state to preserve other selections
+    const currentView = body.view;
+    const currentValues = currentView.state?.values || {};
+    
+    // Get current client options and user options from the existing view
+    const clientOptions = currentView.blocks[0].element.options;
+    const userOptions = currentView.blocks[3].element.options;
+    const statusOptions = currentView.blocks[4].element.options;
+    
+    // Create new project options
     const projectOptions = projects.map(project => ({
       text: {
         type: "plain_text",
@@ -319,67 +367,160 @@ const handleClientFilterSelection = async ({ ack, body, client }) => {
       });
     }
 
-    // Get the current view and create a completely new blocks array
-    const currentView = body.view;
-    const updatedBlocks = [...currentView.blocks];
-    
-    // Completely rebuild the project dropdown element (block index 1)
-    updatedBlocks[1] = {
-      type: "input",
-      block_id: "project_select",
-      element: {
-        type: "static_select",
-        action_id: "project_dropdown",
-        placeholder: {
-          type: "plain_text",
-          text: projectOptions.length > 0 && projectOptions[0].value !== "no_projects" 
-            ? "Select a project to update" 
-            : "No projects available"
-        },
-        options: projectOptions
-        // Explicitly don't set initial_option to ensure dropdown is cleared
-      },
-      label: {
+    // Create a completely new modal with updated project options
+    const updatedModal = {
+      type: "modal",
+      callback_id: "project_update_modal",
+      title: {
         type: "plain_text",
-        text: "Project"
-      }
+        text: "Update Project"
+      },
+      submit: {
+        type: "plain_text",
+        text: "Add Update"
+      },
+      close: {
+        type: "plain_text",
+        text: "Cancel"
+      },
+      blocks: [
+        {
+          type: "input",
+          block_id: "client_select",
+          element: {
+            type: "static_select",
+            action_id: "client_filter_dropdown",
+            placeholder: {
+              type: "plain_text",
+              text: "Select a client to filter projects"
+            },
+            options: clientOptions,
+            initial_option: {
+              text: {
+                type: "plain_text",
+                text: body.actions[0].selected_option.text.text
+              },
+              value: selectedClient
+            }
+          },
+          label: {
+            type: "plain_text",
+            text: "Client Filter"
+          }
+        },
+        {
+          type: "input",
+          block_id: "project_select",
+          element: {
+            type: "static_select",
+            action_id: "project_dropdown",
+            placeholder: {
+              type: "plain_text",
+              text: projectOptions.length > 0 && projectOptions[0].value !== "no_projects" 
+                ? "Select a project to update" 
+                : "No projects available"
+            },
+            options: projectOptions
+          },
+          label: {
+            type: "plain_text",
+            text: "Project"
+          }
+        },
+        {
+          type: "input",
+          block_id: "update_content",
+          element: {
+            type: "plain_text_input",
+            action_id: "content_input",
+            multiline: true,
+            placeholder: {
+              type: "plain_text",
+              text: "Describe the progress, challenges, or any updates for this project..."
+            },
+            max_length: 1000,
+            // Preserve any existing content
+            ...(currentValues.update_content?.content_input?.value && {
+              initial_value: currentValues.update_content.content_input.value
+            })
+          },
+          label: {
+            type: "plain_text",
+            text: "Update Details"
+          }
+        },
+        {
+          type: "input",
+          block_id: "assigned_to",
+          element: {
+            type: "static_select",
+            action_id: "assignee_select",
+            placeholder: {
+              type: "plain_text",
+              text: "Select project lead"
+            },
+            options: userOptions,
+            // Preserve current selection or default
+            initial_option: currentValues.assigned_to?.assignee_select?.selected_option || userOptions[0]
+          },
+          label: {
+            type: "plain_text",
+            text: "Project Lead"
+          }
+        },
+        {
+          type: "input",
+          block_id: "status_update",
+          element: {
+            type: "static_select",
+            action_id: "status_select",
+            placeholder: {
+              type: "plain_text",
+              text: "Select project status"
+            },
+            options: statusOptions,
+            // Preserve current selection or default
+            initial_option: currentValues.status_update?.status_select?.selected_option || statusOptions[0]
+          },
+          label: {
+            type: "plain_text",
+            text: "Project Status"
+          }
+        }
+      ]
     };
 
-    logger.info('Updating modal view', { 
+    logger.info('Updating modal view with new project options', { 
       viewId: body.view.id,
       newProjectOptionsCount: projectOptions.length,
-      blockIndex: 1
+      selectedClient
     });
-
-    // Create a new view object with updated blocks
-    const updatedView = {
-      type: currentView.type,
-      callback_id: currentView.callback_id,
-      title: currentView.title,
-      submit: currentView.submit,
-      close: currentView.close,
-      blocks: updatedBlocks
-    };
 
     const updateResult = await client.views.update({
       view_id: body.view.id,
-      view: updatedView
+      view: updatedModal
     });
 
     if (updateResult.ok) {
       logger.info('Project dropdown updated successfully for client filter', { 
         selectedClient, 
-        projectCount: projects.length 
+        projectCount: projects.length,
+        newViewId: updateResult.view?.id
       });
     } else {
       logger.error('Failed to update modal view', { 
         error: updateResult.error,
-        selectedClient 
+        selectedClient,
+        response: updateResult
       });
     }
 
   } catch (error) {
-    logger.error('Error updating project dropdown:', error);
+    logger.error('Error updating project dropdown:', {
+      error: error.message,
+      stack: error.stack,
+      selectedClient: body.actions?.[0]?.selected_option?.value
+    });
   }
 };
 
