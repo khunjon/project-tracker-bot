@@ -8,51 +8,10 @@ const projectUpdateCommand = async ({ command, ack, respond, client, body, slack
   try {
     logger.info('Project update command initiated', { 
       userId: command.user_id,
-      channelId: command.channel_id,
-      timestamp: new Date().toISOString()
+      channelId: command.channel_id
     });
 
-    // Open modal immediately with loading state to avoid expired trigger_id
-    const loadingModal = {
-      type: "modal",
-      callback_id: "project_update_loading",
-      title: {
-        type: "plain_text",
-        text: "Update Project"
-      },
-      close: {
-        type: "plain_text",
-        text: "Cancel"
-      },
-      blocks: [
-        {
-          type: "section",
-          text: {
-            type: "mrkdwn",
-            text: "🔄 Loading projects and clients..."
-          }
-        }
-      ]
-    };
-
-    const modalResult = await client.views.open({
-      trigger_id: body.trigger_id,
-      view: loadingModal
-    });
-
-    if (!modalResult.ok) {
-      logger.error('Failed to open loading modal', { error: modalResult.error });
-      await respond({
-        text: "❌ Sorry, there was an error opening the project update form. Please try again.",
-        response_type: "ephemeral"
-      });
-      return;
-    }
-
-    const viewId = modalResult.view.id;
-    logger.info('Loading modal opened', { viewId, userId: command.user_id });
-
-    // Now load data with retry logic
+    // Load data with retry logic for cold starts
     let projects, uniqueClients, workspaceUsers;
     let retryCount = 0;
     const maxRetries = 3;
@@ -63,29 +22,9 @@ const projectUpdateCommand = async ({ command, ack, respond, client, body, slack
         projects = await projectService.getAllProjects();
         
         if (projects.length === 0) {
-          await client.views.update({
-            view_id: viewId,
-            view: {
-              type: "modal",
-              callback_id: "project_update_no_projects",
-              title: {
-                type: "plain_text",
-                text: "Update Project"
-              },
-              close: {
-                type: "plain_text",
-                text: "Close"
-              },
-              blocks: [
-                {
-                  type: "section",
-                  text: {
-                    type: "mrkdwn",
-                    text: "📝 No projects found. Create a project first using `/project-new`."
-                  }
-                }
-              ]
-            }
+          await respond({
+            text: "📝 No projects found. Create a project first using `/project-new`.",
+            response_type: "ephemeral"
           });
           return;
         }
@@ -98,9 +37,8 @@ const projectUpdateCommand = async ({ command, ack, respond, client, body, slack
         
         logger.info('Data retrieved successfully for project update', { 
           clientCount: uniqueClients.length, 
-          clients: uniqueClients,
-          userCount: workspaceUsers.length,
           projectCount: projects.length,
+          userCount: workspaceUsers.length,
           retryCount
         });
         
@@ -114,30 +52,9 @@ const projectUpdateCommand = async ({ command, ack, respond, client, body, slack
         });
         
         if (retryCount >= maxRetries) {
-          // Show error in modal instead of closing it
-          await client.views.update({
-            view_id: viewId,
-            view: {
-              type: "modal",
-              callback_id: "project_update_error",
-              title: {
-                type: "plain_text",
-                text: "Update Project"
-              },
-              close: {
-                type: "plain_text",
-                text: "Close"
-              },
-              blocks: [
-                {
-                  type: "section",
-                  text: {
-                    type: "mrkdwn",
-                    text: "❌ Sorry, there was an error loading project data. This might be due to a cold start - please try the command again in a moment."
-                  }
-                }
-              ]
-            }
+          await respond({
+            text: "❌ Sorry, there was an error loading project data. This might be due to a cold start - please try the command again in a moment.",
+            response_type: "ephemeral"
           });
           return;
         }
@@ -212,7 +129,7 @@ const projectUpdateCommand = async ({ command, ack, respond, client, body, slack
       value: project.id
     }));
 
-    const finalModal = {
+    const modal = {
       type: "modal",
       callback_id: "project_update_modal",
       title: {
@@ -368,23 +285,14 @@ const projectUpdateCommand = async ({ command, ack, respond, client, body, slack
       ]
     };
 
-    // Log the modal structure for debugging
-    logger.info('Final modal structure', {
-      clientFilterActionId: finalModal.blocks[0].accessory.action_id,
-      projectDropdownActionId: finalModal.blocks[1].element.action_id,
-      clientOptionsCount: clientOptions.length,
-      projectOptionsCount: projectOptions.length
+    // Open the modal directly
+    await client.views.open({
+      trigger_id: body.trigger_id,
+      view: modal
     });
 
-    // Update the modal with the final form
-    await client.views.update({
-      view_id: viewId,
-      view: finalModal
-    });
-
-    logger.info('Project update modal updated successfully', { 
+    logger.info('Project update modal opened successfully', { 
       userId: body.user_id,
-      viewId,
       clientOptionsCount: clientOptions.length,
       projectOptionsCount: projectOptions.length
     });
@@ -407,9 +315,7 @@ const handleClientFilterSelection = async ({ ack, body, client }) => {
     
     logger.info('Client filter selection triggered', { 
       selectedClient,
-      userId: body.user.id,
-      viewId: body.view.id,
-      actionId: body.actions[0].action_id
+      userId: body.user.id
     });
     
     // Get projects based on client selection
@@ -425,12 +331,6 @@ const handleClientFilterSelection = async ({ ack, body, client }) => {
         clientName: selectedClient
       });
     }
-
-    logger.info('Projects retrieved for client filter', { 
-      selectedClient, 
-      projectCount: projects.length,
-      projectNames: projects.map(p => p.name)
-    });
 
     // Get the current view state to preserve other selections
     const currentView = body.view;
@@ -582,35 +482,21 @@ const handleClientFilterSelection = async ({ ack, body, client }) => {
       ]
     };
 
-    logger.info('Updating modal view with new project options', { 
-      viewId: body.view.id,
-      newProjectOptionsCount: projectOptions.length,
-      selectedClient
-    });
-
     const updateResult = await client.views.update({
       view_id: body.view.id,
       view: updatedModal
     });
 
-    if (updateResult.ok) {
-      logger.info('Project dropdown updated successfully for client filter', { 
-        selectedClient, 
-        projectCount: projects.length,
-        newViewId: updateResult.view?.id
-      });
-    } else {
+    if (!updateResult.ok) {
       logger.error('Failed to update modal view', { 
         error: updateResult.error,
-        selectedClient,
-        response: updateResult
+        selectedClient
       });
     }
 
   } catch (error) {
     logger.error('Error updating project dropdown:', {
       error: error.message,
-      stack: error.stack,
       selectedClient: body.actions?.[0]?.selected_option?.value
     });
   }
