@@ -506,6 +506,7 @@ Just use any of the commands above to get started!`;
         userId: args.body.user.id,
         actionId: args.body.actions[0].action_id,
         selectedValue: args.body.actions[0].selected_option?.value,
+        selectedText: args.body.actions[0].selected_option?.text?.text,
         timestamp: new Date().toISOString()
       });
       
@@ -519,6 +520,27 @@ Just use any of the commands above to get started!`;
         });
         await args.ack();
       }
+    });
+
+    // Add a catch-all action handler for debugging
+    this.app.action(/.*/, async (args) => {
+      const actionId = args.body.actions?.[0]?.action_id;
+      
+      // Only log if it's not one of our known actions
+      if (!['view_project_details', 'view_project_stats', 'create_new_project', 'create_new_project_digest', 
+            'view_all_projects_digest', 'dm_view_projects', 'dm_create_project', 'dm_update_project',
+            'home_view_projects', 'home_create_project', 'home_update_project'].includes(actionId)) {
+        
+        logger.info('Unhandled action triggered', {
+          actionId,
+          userId: args.body.user.id,
+          selectedValue: args.body.actions?.[0]?.selected_option?.value,
+          timestamp: new Date().toISOString(),
+          bodyType: args.body.type
+        });
+      }
+      
+      // Don't ack here - let specific handlers handle it
     });
 
     // Handle button interactions

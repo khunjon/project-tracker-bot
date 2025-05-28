@@ -12,7 +12,47 @@ const projectUpdateCommand = async ({ command, ack, respond, client, body, slack
       timestamp: new Date().toISOString()
     });
 
-    // Add retry logic for cold starts
+    // Open modal immediately with loading state to avoid expired trigger_id
+    const loadingModal = {
+      type: "modal",
+      callback_id: "project_update_loading",
+      title: {
+        type: "plain_text",
+        text: "Update Project"
+      },
+      close: {
+        type: "plain_text",
+        text: "Cancel"
+      },
+      blocks: [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: "🔄 Loading projects and clients..."
+          }
+        }
+      ]
+    };
+
+    const modalResult = await client.views.open({
+      trigger_id: body.trigger_id,
+      view: loadingModal
+    });
+
+    if (!modalResult.ok) {
+      logger.error('Failed to open loading modal', { error: modalResult.error });
+      await respond({
+        text: "❌ Sorry, there was an error opening the project update form. Please try again.",
+        response_type: "ephemeral"
+      });
+      return;
+    }
+
+    const viewId = modalResult.view.id;
+    logger.info('Loading modal opened', { viewId, userId: command.user_id });
+
+    // Now load data with retry logic
     let projects, uniqueClients, workspaceUsers;
     let retryCount = 0;
     const maxRetries = 3;
@@ -23,9 +63,29 @@ const projectUpdateCommand = async ({ command, ack, respond, client, body, slack
         projects = await projectService.getAllProjects();
         
         if (projects.length === 0) {
-          await respond({
-            text: "📝 No projects found. Create a project first using `/project-new`.",
-            response_type: "ephemeral"
+          await client.views.update({
+            view_id: viewId,
+            view: {
+              type: "modal",
+              callback_id: "project_update_no_projects",
+              title: {
+                type: "plain_text",
+                text: "Update Project"
+              },
+              close: {
+                type: "plain_text",
+                text: "Close"
+              },
+              blocks: [
+                {
+                  type: "section",
+                  text: {
+                    type: "mrkdwn",
+                    text: "📝 No projects found. Create a project first using `/project-new`."
+                  }
+                }
+              ]
+            }
           });
           return;
         }
@@ -54,7 +114,32 @@ const projectUpdateCommand = async ({ command, ack, respond, client, body, slack
         });
         
         if (retryCount >= maxRetries) {
-          throw error; // Re-throw after max retries
+          // Show error in modal instead of closing it
+          await client.views.update({
+            view_id: viewId,
+            view: {
+              type: "modal",
+              callback_id: "project_update_error",
+              title: {
+                type: "plain_text",
+                text: "Update Project"
+              },
+              close: {
+                type: "plain_text",
+                text: "Close"
+              },
+              blocks: [
+                {
+                  type: "section",
+                  text: {
+                    type: "mrkdwn",
+                    text: "❌ Sorry, there was an error loading project data. This might be due to a cold start - please try the command again in a moment."
+                  }
+                }
+              ]
+            }
+          });
+          return;
         }
         
         // Wait before retry (exponential backoff)
@@ -127,7 +212,7 @@ const projectUpdateCommand = async ({ command, ack, respond, client, body, slack
       value: project.id
     }));
 
-    const modal = {
+    const finalModal = {
       type: "modal",
       callback_id: "project_update_modal",
       title: {
@@ -284,23 +369,24 @@ const projectUpdateCommand = async ({ command, ack, respond, client, body, slack
       ]
     };
 
-    await client.views.open({
-      trigger_id: body.trigger_id,
-      view: modal
+    // Update the modal with the final form
+    await client.views.update({
+      view_id: viewId,
+      view: finalModal
     });
 
-    logger.info('Project update modal opened successfully', { 
+    logger.info('Project update modal updated successfully', { 
       userId: body.user_id,
-      modalId: modal.callback_id,
+      viewId,
       clientOptionsCount: clientOptions.length,
       projectOptionsCount: projectOptions.length
     });
 
   } catch (error) {
-    logger.error('Error opening project update modal:', error);
+    logger.error('Error in project update command:', error);
     
     await respond({
-      text: "❌ Sorry, there was an error opening the project update form. This might be due to a cold start - please try the command again in a moment.",
+      text: "❌ Sorry, there was an error opening the project update form. Please try again.",
       response_type: "ephemeral"
     });
   }
