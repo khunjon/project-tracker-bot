@@ -6,20 +6,66 @@ const projectListCommand = async ({ command, ack, respond, client, body }) => {
   await ack();
 
   try {
-    // Parse optional client name from command text
-    const clientNameFilter = command.text ? command.text.trim() : '';
+    // Get channel information to detect if this is a client channel
+    let channelInfo = null;
+    let autoDetectedClient = null;
+    
+    try {
+      const channelResult = await client.conversations.info({
+        channel: command.channel_id
+      });
+      
+      if (channelResult.ok && channelResult.channel) {
+        channelInfo = channelResult.channel;
+        
+        // Check if this is a client channel (starts with 'client-')
+        if (channelInfo.name && channelInfo.name.startsWith('client-')) {
+          // Extract client name and format it
+          const rawClientName = channelInfo.name.replace('client-', '');
+          autoDetectedClient = rawClientName
+            .split('-')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+        }
+      }
+    } catch (error) {
+      logger.warn('Could not fetch channel info:', error);
+    }
+
+    // Parse command text for explicit client filter or override
+    const commandText = command.text ? command.text.trim() : '';
+    let clientNameFilter = '';
+    let filterMessage = '';
+    let isAutoDetected = false;
+    
+    if (commandText.toLowerCase() === 'all') {
+      // Explicit override to show all projects
+      clientNameFilter = '';
+      filterMessage = ' (showing all clients)';
+    } else if (commandText) {
+      // Explicit client name provided
+      clientNameFilter = commandText;
+      filterMessage = ` for client "${clientNameFilter}"`;
+    } else if (autoDetectedClient) {
+      // Auto-detect from client channel
+      clientNameFilter = autoDetectedClient;
+      filterMessage = ` for client "${clientNameFilter}"`;
+      isAutoDetected = true;
+    }
     
     // Get projects - filter by client if specified
     let projects;
-    let filterMessage = '';
     
     if (clientNameFilter) {
       projects = await projectService.getAllProjects({ clientName: clientNameFilter });
-      filterMessage = ` for client "${clientNameFilter}"`;
       
       if (projects.length === 0) {
+        const helpText = isAutoDetected 
+          ? `Use \`/project-list all\` to see all projects or \`/project-list "Other Client"\` to filter by a different client.`
+          : `Use \`/project-list\` without parameters to see all projects.`;
+          
         await respond({
-          text: `📋 No projects found for client "${clientNameFilter}". Use \`/project-list\` without parameters to see all projects.`,
+          text: `📋 No projects found for client "${clientNameFilter}". ${helpText}`,
           response_type: "ephemeral"
         });
         return;
@@ -193,14 +239,23 @@ const projectListCommand = async ({ command, ack, respond, client, body }) => {
       }
     );
 
-    // Add help text if client filter was used
+    // Add help text based on context
     if (clientNameFilter) {
+      let helpText;
+      if (isAutoDetected) {
+        helpText = `💡 _Auto-filtered for "${clientNameFilter}" (from #${channelInfo.name}). Use \`/project-list all\` to see all projects or \`/project-list "Other Client"\` to filter by a different client._`;
+      } else if (commandText.toLowerCase() === 'all') {
+        helpText = `💡 _Showing all projects. Use \`/project-list "Client Name"\` to filter by a specific client._`;
+      } else {
+        helpText = `💡 _Showing projects for "${clientNameFilter}". Use \`/project-list all\` to see all projects._`;
+      }
+      
       blocks.push({
         type: "context",
         elements: [
           {
             type: "mrkdwn",
-            text: `💡 _Showing projects for "${clientNameFilter}". Use \`/project-list\` without parameters to see all projects._`
+            text: helpText
           }
         ]
       });
@@ -216,7 +271,9 @@ const projectListCommand = async ({ command, ack, respond, client, body }) => {
     logger.info('Project list displayed', { 
       userId: command.user_id, 
       projectCount: projects.length,
-      clientFilter: clientNameFilter || 'none'
+      clientFilter: clientNameFilter || 'none',
+      autoDetected: isAutoDetected,
+      channelName: channelInfo?.name || 'unknown'
     });
 
   } catch (error) {

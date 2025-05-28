@@ -9,7 +9,7 @@ A comprehensive Slack bot for project management with PostgreSQL database integr
 ### 🤖 Slack Bot Commands
 - **`/project-new [project name]`** - Create new projects with modal forms
 - **`/project-update`** - Add updates to existing projects with AI analysis
-- **`/project-list [client name]`** - View all projects or filter by specific client with interactive details
+- **`/project-list [client name]`** - View all projects with smart client channel detection and filtering
 
 ### 🏠 Home Tab Dashboard
 - **Interactive project dashboard** - Click the bot's "Home" tab for a personalized view
@@ -47,10 +47,22 @@ Add updates to existing projects with AI-powered analysis.
 - Opens a modal with client filter dropdown and project selection
 
 ### `/project-list [client name]`
-View projects with optional client filtering.
-- **Example**: `/project-list` - Shows all projects
-- **Example**: `/project-list Acme Corp` - Shows only projects for "Acme Corp"
-- **Example**: `/project-list "Client Name With Spaces"` - Use quotes for client names with spaces
+View projects with smart client filtering and optional overrides.
+
+**Smart Channel Detection:**
+- When run in a client channel (e.g., `#client-neb`), automatically filters for that client
+- Auto-detects client name from channel name and formats it properly
+
+**Usage Examples:**
+- **`/project-list`** - Shows all projects (or auto-filters if in client channel)
+- **`/project-list all`** - Shows all projects (overrides auto-detection)
+- **`/project-list Acme Corp`** - Shows only projects for "Acme Corp" (overrides auto-detection)
+- **`/project-list "Client Name With Spaces"`** - Use quotes for client names with spaces
+
+**Channel Examples:**
+- In `#client-neb` → automatically shows "Neb" projects
+- In `#client-acme-corp` → automatically shows "Acme Corp" projects  
+- In `#general` → shows all projects (no auto-detection)
 
 ## Tech Stack
 
