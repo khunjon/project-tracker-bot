@@ -6,19 +6,50 @@ const projectListCommand = async ({ command, ack, respond, client, body }) => {
   await ack();
 
   try {
-    // Get all projects
-    const projects = await projectService.getAllProjects();
+    // Parse optional client name from command text
+    const clientNameFilter = command.text ? command.text.trim() : '';
     
-    if (projects.length === 0) {
-      await respond({
-        text: "📋 No projects found. Create your first project using `/project-new`.",
-        response_type: "ephemeral"
-      });
-      return;
+    // Get projects - filter by client if specified
+    let projects;
+    let filterMessage = '';
+    
+    if (clientNameFilter) {
+      projects = await projectService.getAllProjects({ clientName: clientNameFilter });
+      filterMessage = ` for client "${clientNameFilter}"`;
+      
+      if (projects.length === 0) {
+        await respond({
+          text: `📋 No projects found for client "${clientNameFilter}". Use \`/project-list\` without parameters to see all projects.`,
+          response_type: "ephemeral"
+        });
+        return;
+      }
+    } else {
+      projects = await projectService.getAllProjects();
+      
+      if (projects.length === 0) {
+        await respond({
+          text: "📋 No projects found. Create your first project using `/project-new`.",
+          response_type: "ephemeral"
+        });
+        return;
+      }
     }
 
-    // Get project statistics
-    const stats = await projectService.getProjectStats();
+    // Get project statistics (for the filtered set if client specified)
+    const stats = clientNameFilter 
+      ? {
+          total: projects.length,
+          active: projects.filter(p => ['PLANNING', 'IN_PROGRESS'].includes(p.status)).length,
+          byStatus: {
+            planning: projects.filter(p => p.status === 'PLANNING').length,
+            inProgress: projects.filter(p => p.status === 'IN_PROGRESS').length,
+            onHold: projects.filter(p => p.status === 'ON_HOLD').length,
+            completed: projects.filter(p => p.status === 'COMPLETED').length,
+            cancelled: projects.filter(p => p.status === 'CANCELLED').length
+          }
+        }
+      : await projectService.getProjectStats();
 
     // Create the header block
     const blocks = [
@@ -26,7 +57,7 @@ const projectListCommand = async ({ command, ack, respond, client, body }) => {
         type: "section",
         text: {
           type: "mrkdwn",
-          text: `📋 *Project Portfolio Overview*\n\n*Total Projects:* ${stats.total} | *Active:* ${stats.active} | *Completed:* ${stats.byStatus.completed}`
+          text: `📋 *Project Portfolio Overview${filterMessage}*\n\n*Total Projects:* ${stats.total} | *Active:* ${stats.active} | *Completed:* ${stats.byStatus.completed}`
         }
       },
       {
@@ -162,16 +193,30 @@ const projectListCommand = async ({ command, ack, respond, client, body }) => {
       }
     );
 
+    // Add help text if client filter was used
+    if (clientNameFilter) {
+      blocks.push({
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text: `💡 _Showing projects for "${clientNameFilter}". Use \`/project-list\` without parameters to see all projects._`
+          }
+        ]
+      });
+    }
+
     // Send the message
     await respond({
-      text: "📋 Project Portfolio Overview",
+      text: `📋 Project Portfolio Overview${filterMessage}`,
       blocks: blocks,
       response_type: "ephemeral"
     });
 
     logger.info('Project list displayed', { 
       userId: command.user_id, 
-      projectCount: projects.length 
+      projectCount: projects.length,
+      clientFilter: clientNameFilter || 'none'
     });
 
   } catch (error) {

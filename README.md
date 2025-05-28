@@ -9,7 +9,7 @@ A comprehensive Slack bot for project management with PostgreSQL database integr
 ### 🤖 Slack Bot Commands
 - **`/project-new [project name]`** - Create new projects with modal forms
 - **`/project-update`** - Add updates to existing projects with AI analysis
-- **`/project-list`** - View all projects with interactive details
+- **`/project-list [client name]`** - View all projects or filter by specific client with interactive details
 
 ### 🏠 Home Tab Dashboard
 - **Interactive project dashboard** - Click the bot's "Home" tab for a personalized view
@@ -33,6 +33,24 @@ A comprehensive Slack bot for project management with PostgreSQL database integr
 - Complete project lifecycle tracking
 - User management and assignment
 - Update history with AI analysis storage
+
+## Command Usage
+
+### `/project-new [project name]`
+Create a new project with an optional initial name.
+- **Example**: `/project-new Website Redesign`
+- **Example**: `/project-new` (opens form with empty name field)
+
+### `/project-update`
+Add updates to existing projects with AI-powered analysis.
+- **Example**: `/project-update`
+- Opens a modal with client filter dropdown and project selection
+
+### `/project-list [client name]`
+View projects with optional client filtering.
+- **Example**: `/project-list` - Shows all projects
+- **Example**: `/project-list Acme Corp` - Shows only projects for "Acme Corp"
+- **Example**: `/project-list "Client Name With Spaces"` - Use quotes for client names with spaces
 
 ## Tech Stack
 
