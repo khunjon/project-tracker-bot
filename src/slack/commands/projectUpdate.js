@@ -229,9 +229,12 @@ const projectUpdateCommand = async ({ command, ack, respond, client, body, slack
       },
       blocks: [
         {
-          type: "input",
-          block_id: "client_select",
-          element: {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: "*Client Filter*\nSelect a client to filter projects:"
+          },
+          accessory: {
             type: "static_select",
             action_id: "client_filter_dropdown",
             placeholder: {
@@ -240,10 +243,6 @@ const projectUpdateCommand = async ({ command, ack, respond, client, body, slack
             },
             options: clientOptions,
             initial_option: clientOptions[0] // Default to "All Clients"
-          },
-          label: {
-            type: "plain_text",
-            text: "Client Filter"
           }
         },
         {
@@ -371,7 +370,7 @@ const projectUpdateCommand = async ({ command, ack, respond, client, body, slack
 
     // Log the modal structure for debugging
     logger.info('Final modal structure', {
-      clientFilterActionId: finalModal.blocks[0].element.action_id,
+      clientFilterActionId: finalModal.blocks[0].accessory.action_id,
       projectDropdownActionId: finalModal.blocks[1].element.action_id,
       clientOptionsCount: clientOptions.length,
       projectOptionsCount: projectOptions.length
@@ -438,7 +437,7 @@ const handleClientFilterSelection = async ({ ack, body, client }) => {
     const currentValues = currentView.state?.values || {};
     
     // Get current client options and user options from the existing view
-    const clientOptions = currentView.blocks[0].element.options;
+    const clientOptions = currentView.blocks[0].accessory.options;
     const userOptions = currentView.blocks[3].element.options;
     const statusOptions = currentView.blocks[4].element.options;
     
@@ -479,9 +478,12 @@ const handleClientFilterSelection = async ({ ack, body, client }) => {
       },
       blocks: [
         {
-          type: "input",
-          block_id: "client_select",
-          element: {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: "*Client Filter*\nSelect a client to filter projects:"
+          },
+          accessory: {
             type: "static_select",
             action_id: "client_filter_dropdown",
             placeholder: {
@@ -496,10 +498,6 @@ const handleClientFilterSelection = async ({ ack, body, client }) => {
               },
               value: selectedClient
             }
-          },
-          label: {
-            type: "plain_text",
-            text: "Client Filter"
           }
         },
         {
