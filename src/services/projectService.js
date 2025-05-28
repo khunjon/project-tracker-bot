@@ -94,8 +94,10 @@ class ProjectService {
       }
 
       if (filters.clientName) {
+        // Use exact match for client name filtering (for dropdown selections)
+        // Use case-insensitive comparison to handle any case differences
         where.clientName = {
-          contains: filters.clientName,
+          equals: filters.clientName,
           mode: 'insensitive'
         };
       }
