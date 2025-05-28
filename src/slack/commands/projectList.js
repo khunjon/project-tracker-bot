@@ -164,6 +164,7 @@ const projectListCommand = async ({ command, ack, respond, client, body }) => {
 
     // Send the message
     await respond({
+      text: "📋 Project Portfolio Overview",
       blocks: blocks,
       response_type: "ephemeral"
     });
@@ -310,6 +311,7 @@ const handleViewProjectDetails = async ({ ack, body, client }) => {
     await client.chat.postEphemeral({
       channel: body.channel.id,
       user: body.user.id,
+      text: `📋 ${project.name} - Project Details`,
       blocks: detailBlocks
     });
 
@@ -402,6 +404,7 @@ const handleViewProjectStats = async ({ ack, body, client }) => {
     await client.chat.postEphemeral({
       channel: body.channel.id,
       user: body.user.id,
+      text: "📊 Project Portfolio Statistics",
       blocks: statsBlocks
     });
 
